@@ -20,6 +20,7 @@
     "nodes": {
       "opcua-endpoint": "src/nodes/opcua-endpoint.js",
       "opcua-item": "src/nodes/opcua-item.js",
+      "opcua-smart-item": "src/nodes/opcua-smart-item.js",
       "opcua-client": "src/nodes/opcua-client.js",
       "opcua-browser": "src/nodes/opcua-browser.js",
       "opcua-event": "src/nodes/opcua-event.js",

@@ -23,7 +23,7 @@
 
 const STATUS_MAP = {
   // ── Initialization & connection ──────────────────────────────────────────
-  "creating client":    { fill: "green",  shape: "ring", text: "creating client" },
+  "client created":    { fill: "green",  shape: "ring", text: "creating client" },
   "connected":          { fill: "green",  shape: "ring", text: "connected" },
   "initialized":        { fill: "green",  shape: "ring", text: "initialized" },
   "session active":     { fill: "green",  shape: "dot",  text: "session active" },

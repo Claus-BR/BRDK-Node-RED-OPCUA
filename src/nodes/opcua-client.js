@@ -151,8 +151,6 @@ module.exports = function (RED) {
      */
     async function initializeClient() {
       try {
-        setStatus("creating client");
-
         // Initialize certificate manager
         const certManager = getClientCertificateManager();
         await certManager.initialize();
@@ -184,6 +182,8 @@ module.exports = function (RED) {
         // Create the client
         node.client = opcua.OPCUAClient.create(clientOptions);
         registerClientEventHandlers();
+        
+        setStatus("client created");
 
         // Connect immediately or wait for trigger
         if (node.connectOnStart) {
@@ -1402,12 +1402,23 @@ module.exports = function (RED) {
     }
 
     /**
-     * Set status with additional detail text.
+     * Set status with additional detail text and send on output 2.
      */
     function setStatusWithDetail(statusKey, detail) {
       node.currentStatus = statusKey;
       const status = getStatusWithDetail(statusKey, detail);
       node.status(status);
+
+      // Send status notification on output 2
+      const isError = statusKey.includes("error") || statusKey === "disconnected" || statusKey === "terminated";
+      const statusMsg = {
+        payload: statusKey,
+        detail,
+        error: isError ? statusKey : null,
+        endpoint: node.endpointNode?.endpoint || "",
+        status: statusKey,
+      };
+      node.send([null, statusMsg, null]);
     }
 
     /**

@@ -1,0 +1,500 @@
+<!--
+  @file opcua-smart-item.html
+  @description Editor definition for the OPC UA Smart Item node.
+
+  Features:
+    - Editable list of OPC UA items (nodeId, datatype, browseName)
+    - Live treeview browser panel that connects to the server
+    - Click tree nodes to add them to the items list
+    - Drag handle for reordering items
+-->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     1. NODE REGISTRATION
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/javascript">
+  RED.nodes.registerType("opcua-smart-item", {
+    category: "BRDK OPCUA",
+    color: "#3FADB5",
+    defaults: {
+      name:     { value: "" },
+      endpoint: { value: "", type: "opcua-endpoint", required: true },
+      items:    { value: "[]" },
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: "font-awesome/fa-sitemap",
+    align: "right",
+    label: function () {
+      if (this.name) return this.name;
+      var items = [];
+      try { items = JSON.parse(this.items || "[]"); } catch(e) {}
+      if (items.length === 1) return items[0].browseName || items[0].nodeId || "Opcua Smart Item";
+      if (items.length > 1) return items.length + " items";
+      return "Opcua Smart Item";
+    },
+    labelStyle: function () {
+      return this.name ? "node_label_italic" : "";
+    },
+    paletteLabel: "opcua smart item",
+
+    oneditprepare: function () {
+      var node = this;
+      var items = [];
+      try { items = JSON.parse(node.items || "[]"); } catch(e) { items = []; }
+      node._smartItems = items;
+
+      // ── Items list rendering ───────────────────────────────────────
+      var $list = $("#smart-item-list");
+
+      function renderItems() {
+        $list.empty();
+        items.forEach(function (item, idx) {
+          var $row = $('<div class="smart-item-row" data-idx="' + idx + '"></div>');
+          $row.append('<span class="smart-item-nodeId" title="' + item.nodeId + '">' + item.nodeId + '</span>');
+          $row.append('<span class="smart-item-type">' + (item.datatype || '') + '</span>');
+          $row.append('<span class="smart-item-name">' + (item.browseName || '') + '</span>');
+          var $remove = $('<button class="red-ui-button red-ui-button-small smart-item-remove" title="Remove"><i class="fa fa-times"></i></button>');
+          $remove.on("click", function () {
+            items.splice(idx, 1);
+            renderItems();
+          });
+          $row.append($remove);
+          $list.append($row);
+        });
+      }
+
+      renderItems();
+
+      // ── Manual add ─────────────────────────────────────────────────
+      $("#smart-item-add-btn").on("click", function () {
+        var nodeId = $("#smart-item-manual-nodeId").val().trim();
+        if (!nodeId) return;
+        items.push({
+          nodeId: nodeId,
+          datatype: $("#smart-item-manual-datatype").val() || "",
+          browseName: "",
+        });
+        $("#smart-item-manual-nodeId").val("");
+        renderItems();
+      });
+
+      // ── Tree browser ───────────────────────────────────────────────
+      var $tree = $("#smart-item-tree");
+      var $browseBtn = $("#smart-item-browse-btn");
+      var $browseStatus = $("#smart-item-browse-status");
+      var browseCache = {};
+
+      $browseBtn.on("click", function () {
+        var endpointId = $("#node-input-endpoint").val();
+        if (!endpointId || endpointId === "_ADD_") {
+          $browseStatus.text("Select an endpoint first").show();
+          return;
+        }
+        $tree.empty();
+        browseCache = {};
+        $("#smart-item-server-name").hide();
+
+        $browseStatus.text("Connecting...").show();
+        browseNode(endpointId, "ns=0;i=84", $tree, 0);
+      });
+
+      function browseNode(endpointId, nodeId, $parent, depth) {
+        if (browseCache[nodeId]) {
+          renderChildren(browseCache[nodeId], $parent, endpointId, depth);
+          return;
+        }
+
+        $.getJSON("opcua-smart-item/browse", { endpointId: endpointId, nodeId: nodeId })
+          .done(function (data) {
+            var children = data.children || data;
+            browseCache[nodeId] = children;
+            $browseStatus.hide();
+
+            // Show server name from the OPC UA server on root browse
+            if (depth === 0 && data.serverName) {
+              $("#smart-item-server-name").text(data.serverName).show();
+            }
+
+            if (children.length === 0) {
+              if (depth === 0) $browseStatus.text("No items found").show();
+              return;
+            }
+            renderChildren(children, $parent, endpointId, depth);
+          })
+          .fail(function (xhr) {
+            var msg = "Browse failed";
+            try { msg = JSON.parse(xhr.responseText).error || msg; } catch(e) {}
+            $browseStatus.text(msg).show();
+          });
+      }
+
+      function renderChildren(children, $parent, endpointId, depth) {
+        children.forEach(function (child) {
+          var $node = $('<div class="tree-node" style="padding-left:' + (depth * 18) + 'px;"></div>');
+
+          // Expand toggle
+          if (child.hasChildren) {
+            var $toggle = $('<span class="tree-toggle"><i class="fa fa-caret-right"></i></span>');
+            var expanded = false;
+            var $childContainer = $('<div class="tree-children" style="display:none;"></div>');
+
+            $toggle.on("click", function (e) {
+              e.stopPropagation();
+              expanded = !expanded;
+              $toggle.find("i").toggleClass("fa-caret-right fa-caret-down");
+              if (expanded) {
+                $childContainer.show();
+                if ($childContainer.children().length === 0) {
+                  browseNode(endpointId, child.nodeId, $childContainer, depth + 1);
+                }
+              } else {
+                $childContainer.hide();
+              }
+            });
+
+            $node.append($toggle);
+          } else {
+            $node.append('<span class="tree-toggle-placeholder"></span>');
+          }
+
+          // Icon
+          var iconClass = child.isVariable ? "fa-cube" : "fa-folder";
+          $node.append('<i class="fa ' + iconClass + ' tree-icon"></i>');
+
+          // Label
+          var label = child.displayName || child.browseName;
+          if (child.dataType) label += ' <span class="tree-datatype">[' + child.dataType + ']</span>';
+          var $label = $('<span class="tree-label">' + label + '</span>');
+          $node.append($label);
+
+          // Hover info
+          (function(c) {
+            $node.on("mouseenter", function () {
+              var info = c.nodeId;
+              if (c.dataType) info += '  \u2022  ' + c.dataType;
+              $("#smart-item-info-text").text(info);
+            });
+          })(child);
+
+          // Add button for variables
+          if (child.isVariable) {
+            var $addBtn = $('<button class="red-ui-button red-ui-button-small tree-add-btn" title="Add to items"><i class="fa fa-plus"></i></button>');
+            $addBtn.on("click", function (e) {
+              e.stopPropagation();
+              // Check if already added
+              var exists = items.some(function (it) { return it.nodeId === child.nodeId; });
+              if (exists) return;
+              items.push({
+                nodeId: child.nodeId,
+                datatype: child.dataType || "",
+                browseName: child.displayName || child.browseName,
+              });
+              renderItems();
+              $addBtn.prop("disabled", true).find("i").removeClass("fa-plus").addClass("fa-check");
+            });
+            $node.append($addBtn);
+          }
+
+          $parent.append($node);
+
+          // Append child container after the node
+          if (child.hasChildren) {
+            $parent.append($childContainer);
+          }
+        });
+      }
+
+    },
+
+    oneditsave: function () {
+      if (this._smartItems) {
+        var json = JSON.stringify(this._smartItems);
+        $("#node-input-items").val(json);
+      }
+    },
+  });
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     2. STYLES
+     ═══════════════════════════════════════════════════════════════════════ -->
+<style>
+  /* ── Items list ─────────────────────────────────────────────────── */
+  #smart-item-list {
+    border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+    border-radius: 4px;
+    max-height: 180px;
+    overflow-y: auto;
+    margin-bottom: 8px;
+    background: var(--red-ui-form-input-background-color, #fff);
+  }
+  .smart-item-row {
+    display: flex;
+    align-items: center;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);
+    font-size: 12px;
+    gap: 6px;
+  }
+  .smart-item-row:last-child { border-bottom: none; }
+  .smart-item-nodeId {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: monospace;
+  }
+  .smart-item-type {
+    color: var(--red-ui-text-color-info, #888);
+    min-width: 60px;
+    text-align: center;
+    font-size: 11px;
+  }
+  .smart-item-name {
+    color: var(--red-ui-text-color-info, #666);
+    min-width: 80px;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .smart-item-remove {
+    flex-shrink: 0;
+  }
+
+  /* ── Manual add row ─────────────────────────────────────────────── */
+  .smart-item-add-row {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+  .smart-item-add-row input { flex: 1; }
+  .smart-item-add-row select { width: 100px; }
+
+  /* ── Tree browser ───────────────────────────────────────────────── */
+  #smart-item-tree-container {
+    border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+    border-radius: 4px 4px 0 0;
+    max-height: 300px;
+    overflow: auto;
+    background: var(--red-ui-form-input-background-color, #fff);
+    padding: 4px;
+  }
+  #smart-item-server-name {
+    padding: 5px 8px;
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--red-ui-text-color, #333);
+    background: var(--red-ui-secondary-background-color, #f7f7f7);
+    border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);
+    margin: -4px -4px 4px -4px;
+    border-radius: 4px 4px 0 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #smart-item-server-name::before {
+    content: "\f233 ";
+    font-family: FontAwesome;
+    margin-right: 4px;
+    color: var(--red-ui-text-color-info, #888);
+  }
+  #smart-item-browse-status {
+    display: none;
+    padding: 6px;
+    color: var(--red-ui-text-color-info, #888);
+    font-style: italic;
+    font-size: 12px;
+  }
+  .tree-node {
+    display: flex;
+    align-items: center;
+    padding: 2px 4px;
+    cursor: default;
+    font-size: 12px;
+    gap: 4px;
+    border-radius: 3px;
+  }
+  .tree-node:hover {
+    background: var(--red-ui-list-item-hover-background, #f0f0f0);
+  }
+  .tree-toggle {
+    cursor: pointer;
+    width: 14px;
+    text-align: center;
+    flex-shrink: 0;
+    color: var(--red-ui-text-color-info, #888);
+  }
+  .tree-toggle-placeholder {
+    width: 14px;
+    flex-shrink: 0;
+  }
+  .tree-icon {
+    color: var(--red-ui-text-color-info, #888);
+    width: 14px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .tree-icon.fa-cube { color: #3FADB5; }
+  .tree-icon.fa-folder { color: #d4a017; }
+  .tree-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tree-datatype {
+    color: var(--red-ui-text-color-info, #999);
+    font-size: 10px;
+    font-style: italic;
+  }
+  .tree-add-btn {
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
+  .tree-add-btn:hover { opacity: 1; }
+  .tree-children {
+    /* Indented by inline styles */
+  }
+
+  /* ── Info bar ─────────────────────────────────────────────────── */
+  #smart-item-tree-info {
+    border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: monospace;
+    color: var(--red-ui-text-color-info, #888);
+    background: var(--red-ui-secondary-background-color, #f7f7f7);
+    min-height: 18px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+</style>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     3. EDIT TEMPLATE
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-template-name="opcua-smart-item">
+
+  <!-- Name -->
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Smart Item">
+  </div>
+
+  <!-- Endpoint -->
+  <div class="form-row">
+    <label for="node-input-endpoint"><i class="fa fa-globe"></i> Endpoint</label>
+    <input type="text" id="node-input-endpoint">
+  </div>
+
+  <!-- Hidden items JSON storage -->
+  <input type="hidden" id="node-input-items">
+
+  <!-- Items list -->
+  <div class="form-row">
+    <label style="width: 100%; margin-bottom: 4px;"><i class="fa fa-list"></i> Items</label>
+    <div id="smart-item-list"></div>
+  </div>
+
+  <!-- Manual add -->
+  <div class="form-row">
+    <label style="width: 100%; margin-bottom: 4px;"><i class="fa fa-plus-circle"></i> Add manually</label>
+    <div class="smart-item-add-row">
+      <input type="text" id="smart-item-manual-nodeId" placeholder="ns=2;s=MyVariable">
+      <select id="smart-item-manual-datatype">
+        <option value="Boolean" selected>Boolean</option>
+        <option value="SByte">SByte</option>
+        <option value="Byte">Byte</option>
+        <option value="Int16">Int16</option>
+        <option value="Int32">Int32</option>
+        <option value="Int64">Int64</option>
+        <option value="UInt16">UInt16</option>
+        <option value="UInt32">UInt32</option>
+        <option value="UInt64">UInt64</option>
+        <option value="Float">Float</option>
+        <option value="Double" >Double</option>
+        <option value="String">String</option>
+        <option value="DateTime">DateTime</option>
+        <option value="ByteString">ByteString</option>
+        <option value="NodeId">NodeId</option>
+        <option value="LocalizedText">LocalizedText</option>
+        <option value="ExtensionObject">ExtensionObject</option>
+      </select>
+      <button class="red-ui-button" id="smart-item-add-btn"><i class="fa fa-plus"></i></button>
+    </div>
+  </div>
+
+  <!-- Tree browser -->
+  <div class="form-row">
+    <label style="width: 100%; margin-bottom: 4px;">
+      <i class="fa fa-sitemap"></i> Browse Server
+      <button class="red-ui-button red-ui-button-small" id="smart-item-browse-btn" style="margin-left: 8px;">
+        <i class="fa fa-refresh"></i> Connect &amp; Browse
+      </button>
+    </label>
+    <div id="smart-item-browse-status"></div>
+    <div id="smart-item-tree-container">
+      <div id="smart-item-server-name" style="display:none;"></div>
+      <div id="smart-item-tree"></div>
+    </div>
+    <div id="smart-item-tree-info">
+      <span id="smart-item-info-text">Hover over a node to see details</span>
+    </div>
+  </div>
+
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     4. HELP TEXT
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-help-name="opcua-smart-item">
+  <p>Configures one or more OPC UA items with live server browsing support.</p>
+
+  <h3>Features</h3>
+  <ul>
+    <li><b>Live treeview</b> — Browse the server's address space directly from the editor.
+        Click <b>Connect &amp; Browse</b> to load the tree, then click <i class="fa fa-plus"></i>
+        next to any variable to add it.</li>
+    <li><b>Multiple items</b> — Add as many variables as needed. They are sent to the
+        Client node in the correct format for <code>readmultiple</code> or
+        <code>subscribe</code> actions.</li>
+    <li><b>Manual entry</b> — Type a NodeId directly if you know the address.</li>
+  </ul>
+
+  <h3>Outputs</h3>
+  <h4>Single item (1 item configured)</h4>
+  <dl class="message-properties">
+    <dt>msg.topic <span class="property-type">string</span></dt>
+    <dd>The NodeId, e.g. <code>ns=2;s=MyVariable</code></dd>
+    <dt>msg.datatype <span class="property-type">string</span></dt>
+    <dd>The OPC UA data type name</dd>
+    <dt>msg.browseName <span class="property-type">string</span></dt>
+    <dd>Human-readable display name</dd>
+  </dl>
+
+  <h4>Multiple items (2+ items configured)</h4>
+  <dl class="message-properties">
+    <dt>msg.topic <span class="property-type">string</span></dt>
+    <dd>Set to <code>"multiple"</code></dd>
+    <dt>msg.payload <span class="property-type">array</span></dt>
+    <dd>Array of <code>{ nodeId, datatype, browseName }</code> objects</dd>
+  </dl>
+
+  <h3>Usage</h3>
+  <p>Place this node before an <b>OPC UA Client</b> node. For <code>read</code>
+  or <code>subscribe</code> actions, the Smart Item provides the item metadata.
+  For <code>write</code>, set <code>msg.payload</code> to the value you want to write.</p>
+
+  <p>For multiple items, use with the <code>readmultiple</code> action on the Client node.</p>
+
+  <h3>Endpoint</h3>
+  <p>The endpoint is required for the treeview browser. It uses the same connection
+  details (URL, security, authentication) as your OPC UA Client node. The browse
+  connection is ephemeral — it connects only when you click <b>Connect &amp; Browse</b>
+  and disconnects immediately after.</p>
+</script>
