@@ -1,0 +1,156 @@
+<!--
+  @file opcua-item.html
+  @description Editor definition for the OPC UA Item node.
+
+  Configures an OPC UA item with:
+    - NodeId address (ns=2;s=... or ns=2;i=... or br=/objects/...)
+    - Data type
+    - Optional static value
+    - Browse name / display label
+-->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     1. NODE REGISTRATION
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/javascript">
+  RED.nodes.registerType("opcua-item", {
+    category: "BRDK OPCUA",
+    color: "#3FADB5",
+    defaults: {
+      item:     { value: "", required: true },
+      datatype: { value: "", required: true },
+      value:    { value: "" },
+      name:     { value: "" },
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: "font-awesome/fa-tag",
+    align: "right",
+    label: function () {
+      return this.name || this.item || "OPC UA Item";
+    },
+    labelStyle: function () {
+      return this.name ? "node_label_italic" : "";
+    },
+    paletteLabel: "opcua item",
+  });
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     2. EDIT TEMPLATE
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-template-name="opcua-item">
+
+  <!-- Item address -->
+  <div class="form-row">
+    <label for="node-input-item"><i class="fa fa-address-card"></i> Item</label>
+    <input type="text" id="node-input-item" placeholder="ns=2;s=MyVariable  or  ns=2;i=1234  or  br=/objects/...">
+  </div>
+
+  <!-- Data type -->
+  <div class="form-row">
+    <label for="node-input-datatype"><i class="fa fa-database"></i> Data Type</label>
+    <select id="node-input-datatype">
+      <optgroup label="Integer">
+        <option value="SByte">SByte (Int8)</option>
+        <option value="Int16">Int16</option>
+        <option value="Int32">Int32</option>
+        <option value="Int64">Int64</option>
+        <option value="Byte">Byte (UInt8)</option>
+        <option value="UInt16">UInt16</option>
+        <option value="UInt32">UInt32</option>
+        <option value="UInt64">UInt64</option>
+      </optgroup>
+      <optgroup label="Floating Point">
+        <option value="Float">Float</option>
+        <option value="Double">Double</option>
+      </optgroup>
+      <optgroup label="Other Scalars">
+        <option value="Boolean">Boolean</option>
+        <option value="String">String</option>
+        <option value="LocalizedText">LocalizedText</option>
+        <option value="DateTime">DateTime</option>
+        <option value="ByteString">ByteString</option>
+        <option value="NodeId">NodeId</option>
+      </optgroup>
+      <optgroup label="Integer Arrays">
+        <option value="SByte Array">SByte Array</option>
+        <option value="Int16 Array">Int16 Array</option>
+        <option value="Int32 Array">Int32 Array</option>
+        <option value="Byte Array">Byte Array</option>
+        <option value="UInt16 Array">UInt16 Array</option>
+        <option value="UInt32 Array">UInt32 Array</option>
+      </optgroup>
+      <optgroup label="Floating Point Arrays">
+        <option value="Float Array">Float Array</option>
+        <option value="Double Array">Double Array</option>
+      </optgroup>
+      <optgroup label="Other Arrays">
+        <option value="Boolean Array">Boolean Array</option>
+        <option value="String Array">String Array</option>
+      </optgroup>
+      <optgroup label="Complex">
+        <option value="ExtensionObject">ExtensionObject</option>
+        <option value="ExtensionObject Array">ExtensionObject Array</option>
+      </optgroup>
+    </select>
+  </div>
+
+  <!-- Static value (optional) -->
+  <div class="form-row">
+    <label for="node-input-value"><i class="fa fa-pencil"></i> Value</label>
+    <input type="text" id="node-input-value" placeholder="Leave empty to use msg.payload">
+  </div>
+
+  <!-- Display name -->
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Browse / display name">
+  </div>
+
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     3. HELP TEXT
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-help-name="opcua-item">
+  <p>Configures an OPC UA item and enriches the message for downstream OPC UA nodes.</p>
+
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt class="optional">payload <span class="property-type">any</span></dt>
+    <dd>Value to write (overrides the static value configured in the node).</dd>
+    <dt class="optional">datatype <span class="property-type">string</span></dt>
+    <dd>Data type override (if not configured in the node).</dd>
+  </dl>
+
+  <h3>Outputs</h3>
+  <dl class="message-properties">
+    <dt>topic <span class="property-type">string</span></dt>
+    <dd>The OPC UA NodeId address (e.g. <code>ns=2;s=MyVariable</code>).</dd>
+    <dt>datatype <span class="property-type">string</span></dt>
+    <dd>The OPC UA data type name (e.g. <code>Double</code>, <code>Int32 Array</code>).</dd>
+    <dt>browseName <span class="property-type">string</span></dt>
+    <dd>The human-readable display name.</dd>
+    <dt>payload <span class="property-type">any</span></dt>
+    <dd>The value, coerced to the correct type for write operations.</dd>
+  </dl>
+
+  <h3>Details</h3>
+  <p>Place this node before an <b>OPC UA Client</b> node to configure which
+  OPC UA variable to read, write, or subscribe to.</p>
+
+  <h4>Item address formats</h4>
+  <ul>
+    <li><code>ns=2;s=MyVariable</code> — string NodeId</li>
+    <li><code>ns=2;i=1234</code> — numeric NodeId</li>
+    <li><code>br=/objects/3:Simulation/3:Counter</code> — browse path</li>
+  </ul>
+
+  <h4>Value handling</h4>
+  <ul>
+    <li>If <b>Value</b> is set and <code>msg.payload</code> is empty, the static value is used.</li>
+    <li>If <code>msg.payload</code> has content, it overrides the static value.</li>
+    <li>Array values can be provided as comma-separated strings: <code>1,2,3,4,5</code>.</li>
+  </ul>
+</script>

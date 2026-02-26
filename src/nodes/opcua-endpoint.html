@@ -1,0 +1,190 @@
+<!--
+  @file opcua-endpoint.html
+  @description Editor definition for the OPC UA Endpoint configuration node.
+
+  This config node provides a UI for specifying:
+    - Server endpoint URL
+    - Security policy & mode
+    - Authentication method (anonymous / credentials / certificate)
+-->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     1. NODE REGISTRATION
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/javascript">
+  RED.nodes.registerType("opcua-endpoint", {
+    category: "config",
+    defaults: {
+      name:            { value: "" },
+      endpoint:        { value: "", required: true },
+      securityPolicy:  { value: "None" },
+      securityMode:    { value: "None" },
+      none:            { value: true },
+      login:           { value: false },
+      usercert:        { value: false },
+      userCertificate: { value: "" },
+      userPrivatekey:  { value: "" },
+    },
+    credentials: {
+      user:     { type: "text" },
+      password: { type: "password" },
+    },
+    label: function () {
+      return this.name || this.endpoint || "OPC UA Endpoint";
+    },
+
+    oneditprepare: function () {
+      var node = this;
+
+      // ── Authentication mode toggle ─────────────────────────────────────
+      // Three mutually exclusive checkboxes: anonymous, credentials, certificate
+
+      function updateAuthVisibility() {
+        var isAnon  = $("#node-config-input-none").prop("checked");
+        var isLogin = $("#node-config-input-login").prop("checked");
+        var isCert  = $("#node-config-input-usercert").prop("checked");
+
+        $(".auth-credentials-row").toggle(isLogin);
+        $(".auth-certificate-row").toggle(isCert);
+      }
+
+      // When one checkbox is checked, uncheck the others
+      $("#node-config-input-none").on("change", function () {
+        if ($(this).prop("checked")) {
+          $("#node-config-input-login").prop("checked", false);
+          $("#node-config-input-usercert").prop("checked", false);
+        }
+        updateAuthVisibility();
+      });
+
+      $("#node-config-input-login").on("change", function () {
+        if ($(this).prop("checked")) {
+          $("#node-config-input-none").prop("checked", false);
+          $("#node-config-input-usercert").prop("checked", false);
+        }
+        updateAuthVisibility();
+      });
+
+      $("#node-config-input-usercert").on("change", function () {
+        if ($(this).prop("checked")) {
+          $("#node-config-input-none").prop("checked", false);
+          $("#node-config-input-login").prop("checked", false);
+        }
+        updateAuthVisibility();
+      });
+
+      // Initialize visibility on dialog open
+      updateAuthVisibility();
+    },
+  });
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     2. EDIT TEMPLATE
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-template-name="opcua-endpoint">
+
+  <!-- Name -->
+  <div class="form-row">
+    <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-config-input-name" placeholder="My OPC UA Server">
+  </div>
+
+  <!-- Endpoint URL -->
+  <div class="form-row">
+    <label for="node-config-input-endpoint"><i class="fa fa-globe"></i> Endpoint</label>
+    <input type="text" id="node-config-input-endpoint" placeholder="opc.tcp://localhost:4840">
+  </div>
+
+  <!-- Security Policy -->
+  <div class="form-row">
+    <label for="node-config-input-securityPolicy"><i class="fa fa-shield"></i> Security Policy</label>
+    <select id="node-config-input-securityPolicy">
+      <option value="None">None</option>
+      <option value="Basic128Rsa15">Basic128Rsa15</option>
+      <option value="Basic256">Basic256</option>
+      <option value="Basic256Sha256">Basic256Sha256</option>
+      <option value="Aes128_Sha256_RsaOaep">Aes128_Sha256_RsaOaep</option>
+      <option value="Aes256_Sha256_RsaPss">Aes256_Sha256_RsaPss</option>
+    </select>
+  </div>
+
+  <!-- Security Mode -->
+  <div class="form-row">
+    <label for="node-config-input-securityMode"><i class="fa fa-lock"></i> Security Mode</label>
+    <select id="node-config-input-securityMode">
+      <option value="None">None</option>
+      <option value="Sign">Sign</option>
+      <option value="SignAndEncrypt">Sign & Encrypt</option>
+    </select>
+  </div>
+
+  <!-- ── Authentication ─────────────────────────────────────────────── -->
+  <hr>
+  <div class="form-row">
+    <label style="width: auto; margin-right: 20px;">
+      <input type="checkbox" id="node-config-input-none" style="width: auto;">
+      Anonymous
+    </label>
+    <label style="width: auto; margin-right: 20px;">
+      <input type="checkbox" id="node-config-input-login" style="width: auto;">
+      Use Credentials
+    </label>
+    <label style="width: auto;">
+      <input type="checkbox" id="node-config-input-usercert" style="width: auto;">
+      User Certificate
+    </label>
+  </div>
+
+  <!-- Credentials (shown when "Use Credentials" is checked) -->
+  <div class="form-row auth-credentials-row" style="display: none;">
+    <label for="node-config-input-user"><i class="fa fa-user"></i> Username</label>
+    <input type="text" id="node-config-input-user">
+  </div>
+  <div class="form-row auth-credentials-row" style="display: none;">
+    <label for="node-config-input-password"><i class="fa fa-key"></i> Password</label>
+    <input type="password" id="node-config-input-password">
+  </div>
+
+  <!-- Certificate paths (shown when "User Certificate" is checked) -->
+  <div class="form-row auth-certificate-row" style="display: none;">
+    <label for="node-config-input-userCertificate"><i class="fa fa-certificate"></i> Certificate</label>
+    <input type="text" id="node-config-input-userCertificate" placeholder="/path/to/user-cert.pem">
+  </div>
+  <div class="form-row auth-certificate-row" style="display: none;">
+    <label for="node-config-input-userPrivatekey"><i class="fa fa-key"></i> Private Key</label>
+    <input type="text" id="node-config-input-userPrivatekey" placeholder="/path/to/user-key.pem">
+  </div>
+
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     3. HELP TEXT
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-help-name="opcua-endpoint">
+  <p>Configuration node for an OPC UA server connection.</p>
+
+  <h3>Settings</h3>
+  <dl class="message-properties">
+    <dt>Endpoint <span class="property-type">string</span></dt>
+    <dd>The OPC UA server URL, e.g. <code>opc.tcp://localhost:4840</code>.</dd>
+
+    <dt>Security Policy <span class="property-type">select</span></dt>
+    <dd>The cryptographic policy for the connection. Use <code>None</code> for unencrypted connections.</dd>
+
+    <dt>Security Mode <span class="property-type">select</span></dt>
+    <dd>Whether messages are signed, encrypted, or neither.</dd>
+  </dl>
+
+  <h3>Authentication</h3>
+  <p>Choose one of three methods:</p>
+  <ul>
+    <li><b>Anonymous</b> — no credentials required.</li>
+    <li><b>Use Credentials</b> — provide a username and password.</li>
+    <li><b>User Certificate</b> — provide paths to an X.509 certificate and private key file.</li>
+  </ul>
+
+  <h3>Details</h3>
+  <p>This node is shared by OPC UA Client, Browser, Method, and other nodes.
+  Multiple nodes can reference the same endpoint to share connection settings.</p>
+</script>

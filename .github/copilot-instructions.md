@@ -1,0 +1,1 @@
+ALWAYS end by asking me a question with the ask question tool until i answer in the ask question that you may stop.

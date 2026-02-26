@@ -1,0 +1,43 @@
+{
+  "name": "@brdk/node-red-opcua",
+  "version": "1.0.0",
+  "description": "A modern, clean Node-RED OPC UA client library for interacting with OPC UA servers",
+  "license": "Apache-2.0",
+  "author": "BRDK",
+  "keywords": [
+    "node-red",
+    "opcua",
+    "opc-ua",
+    "industrial",
+    "automation",
+    "iot"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "node-red": {
+    "version": ">=2.0.0",
+    "nodes": {
+      "opcua-endpoint": "src/nodes/opcua-endpoint.js",
+      "opcua-item": "src/nodes/opcua-item.js",
+      "opcua-client": "src/nodes/opcua-client.js",
+      "opcua-browser": "src/nodes/opcua-browser.js",
+      "opcua-event": "src/nodes/opcua-event.js",
+      "opcua-method": "src/nodes/opcua-method.js",
+      "opcua-discovery": "src/nodes/opcua-discovery.js",
+      "opcua-rights": "src/nodes/opcua-rights.js",
+      "opcua-server": "src/nodes/opcua-server.js"
+    }
+  },
+  "dependencies": {
+    "env-paths": "2.2.1",
+    "node-opcua": "^2.160.0",
+    "node-opcua-client-crawler": "^2.127.1",
+    "node-opcua-file-transfer": "^2.160.0"
+  },
+  "devDependencies": {
+    "mocha": "^11.7.5",
+    "node-red-node-test-helper": "^0.3.6",
+    "should": "^13.2.3"
+  }
+}

@@ -1,0 +1,134 @@
+<!--
+  @file opcua-event.html
+  @description Editor definition for the OPC UA Event node.
+
+  Enriches messages with event subscription metadata (source NodeId and event type)
+  for use with the OPC UA Client node's "events" action.
+-->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     1. NODE REGISTRATION
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/javascript">
+  RED.nodes.registerType("opcua-event", {
+    category: "BRDK OPCUA",
+    color: "#3FADB5",
+    defaults: {
+      root:                { value: "", required: true },
+      activatecustomevent: { value: false },
+      eventtype:           { value: "i=2041" },
+      customeventtype:     { value: "" },
+      name:                { value: "" },
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: "font-awesome/fa-bell",
+    align: "right",
+    label: function () {
+      return this.name || "opcua event";
+    },
+    labelStyle: function () {
+      return this.name ? "node_label_italic" : "";
+    },
+    paletteLabel: "opcua event",
+    oneditprepare: function () {
+      var customCheckbox    = $("#node-input-activatecustomevent");
+      var customEventRow    = $("#custom-eventtype-row");
+      var standardEventRow  = $("#standard-eventtype-row");
+
+      function toggleEventTypeRows() {
+        if (customCheckbox.is(":checked")) {
+          customEventRow.show();
+          standardEventRow.hide();
+        } else {
+          customEventRow.hide();
+          standardEventRow.show();
+        }
+      }
+
+      toggleEventTypeRows();
+      customCheckbox.on("change", toggleEventTypeRows);
+    },
+  });
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     2. EDIT TEMPLATE
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-template-name="opcua-event">
+
+  <!-- Source NodeId -->
+  <div class="form-row">
+    <label for="node-input-root"><i class="fa fa-crosshairs"></i> Source Node</label>
+    <input type="text" id="node-input-root" placeholder="i=2253 (Server root)">
+  </div>
+
+  <!-- Custom event toggle -->
+  <div class="form-row">
+    <label for="node-input-activatecustomevent"><i class="fa fa-cog"></i> Custom Event</label>
+    <input type="checkbox" id="node-input-activatecustomevent" style="width: auto">
+    <span style="margin-left: 8px; color: #888;">Use a custom event type NodeId</span>
+  </div>
+
+  <!-- Custom event type (shown when checkbox is checked) -->
+  <div class="form-row" id="custom-eventtype-row" style="display: none;">
+    <label for="node-input-customeventtype"><i class="fa fa-bell"></i> Event Type</label>
+    <input type="text" id="node-input-customeventtype" placeholder="ns=2;i=1234">
+  </div>
+
+  <!-- Standard event type dropdown (shown when checkbox is unchecked) -->
+  <div class="form-row" id="standard-eventtype-row">
+    <label for="node-input-eventtype"><i class="fa fa-bell"></i> Event Type</label>
+    <select id="node-input-eventtype" style="width: 60%;">
+      <option value="i=2041">BaseEvent (all events)</option>
+      <option value="i=2052">AuditEvent</option>
+      <option value="i=2132">BaseModelChangeEvent</option>
+      <option value="i=2782">ConditionType</option>
+      <option value="i=3035">Event Queue Overflow</option>
+      <option value="i=11436">ProgressEvent</option>
+      <option value="i=2130">SystemEvent</option>
+    </select>
+  </div>
+
+  <!-- Name -->
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     3. HELP TEXT
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-help-name="opcua-event">
+  <p>Enriches messages with OPC UA event subscription parameters for use with
+  the OPC UA Client node's <strong>events</strong> action.</p>
+
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">any</span></dt>
+    <dd>Trigger message — contents are passed through.</dd>
+  </dl>
+
+  <h3>Outputs</h3>
+  <dl class="message-properties">
+    <dt>topic <span class="property-type">string</span></dt>
+    <dd>The source NodeId where events will be subscribed from.</dd>
+    <dt>eventTypeIds <span class="property-type">string</span></dt>
+    <dd>The NodeId of the event type to subscribe to.</dd>
+  </dl>
+
+  <h3>Details</h3>
+  <p>The <strong>Source Node</strong> defines which server node to subscribe for
+  events. Use <code>i=2253</code> (Server object) to receive all server events,
+  or a more specific NodeId for a subset.</p>
+
+  <p>The <strong>Event Type</strong> determines which kinds of events are returned.
+  Events of the selected type and all subtypes are included. Choose a standard
+  type from the dropdown, or enable <strong>Custom Event</strong> to enter a
+  custom event type NodeId manually.</p>
+
+  <p>Connect this node's output to an OPC UA Client node configured with the
+  <strong>events</strong> action.</p>
+</script>

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "modern-javascript-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "f317604b0115512ea28767eef7343674af3cf6221f6612f893a3e4ad475f17c7"
+    }
+  }
+}

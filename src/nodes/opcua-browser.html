@@ -1,0 +1,93 @@
+<!--
+  @file opcua-browser.html
+  @description Editor definition for the OPC UA Browser node.
+
+  Browses the OPC UA server address space at a given NodeId and returns
+  enriched references with values and data types.
+-->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     1. NODE REGISTRATION
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/javascript">
+  RED.nodes.registerType("opcua-browser", {
+    category: "BRDK OPCUA",
+    color: "#3FADB5",
+    defaults: {
+      endpoint: { value: "", type: "opcua-endpoint", required: true },
+      topic:    { value: "" },
+      name:     { value: "" },
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: "font-awesome/fa-sitemap",
+    align: "right",
+    label: function () {
+      return this.name || "opcua browser";
+    },
+    labelStyle: function () {
+      return this.name ? "node_label_italic" : "";
+    },
+    paletteLabel: "opcua browser",
+  });
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     2. EDIT TEMPLATE
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-template-name="opcua-browser">
+
+  <!-- Endpoint -->
+  <div class="form-row">
+    <label for="node-input-endpoint"><i class="fa fa-globe"></i> Endpoint</label>
+    <input type="text" id="node-input-endpoint">
+  </div>
+
+  <!-- Browse root NodeId -->
+  <div class="form-row">
+    <label for="node-input-topic"><i class="fa fa-sitemap"></i> NodeId</label>
+    <input type="text" id="node-input-topic" placeholder="ns=0;i=85 (Objects folder)">
+  </div>
+
+  <!-- Name -->
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     3. HELP TEXT
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-help-name="opcua-browser">
+  <p>Browses the OPC UA server address space and returns enriched node references.</p>
+
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt class="optional">topic <span class="property-type">string</span></dt>
+    <dd>NodeId to browse. Overrides the configured NodeId. Defaults to <code>ns=0;i=85</code> (Objects folder).</dd>
+  </dl>
+
+  <h3>Outputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">array</span></dt>
+    <dd>Array of browse result references, each containing:
+      <code>browseName</code>, <code>nodeId</code>, <code>displayName</code>,
+      <code>nodeClass</code>, <code>typeDefinition</code>, <code>value</code>,
+      <code>dataType</code>, <code>statusCode</code>.
+    </dd>
+    <dt>endpoint <span class="property-type">string</span></dt>
+    <dd>The OPC UA server endpoint URL.</dd>
+  </dl>
+
+  <h3>Details</h3>
+  <p>This node creates a temporary connection to the OPC UA server, browses the
+  address space at the specified NodeId, reads the value and data type of each
+  child reference, and returns the enriched results.</p>
+
+  <p>Unlike the OPC UA Client node, the Browser creates a fresh connection for
+  each browse operation — ideal for one-shot address space exploration.</p>
+
+  <p>If no NodeId is specified, it defaults to the Objects folder (<code>ns=0;i=85</code>).</p>
+</script>

@@ -1,0 +1,298 @@
+<!--
+  opcua-server.html
+  Node-RED editor configuration for the OPC UA Server node.
+-->
+<script type="text/javascript">
+  RED.nodes.registerType("opcua-server", {
+    category: "BRDK OPCUA",
+    color: "#E9967A",
+    defaults: {
+      name:                      { value: "" },
+      port:                      { value: 53880, validate: RED.validators.number() },
+      endpoint:                  { value: "" },
+      users:                     { value: "" },
+      nodesetDir:                { value: "" },
+      autoAcceptUnknownCertificate: { value: true },
+      registerToDiscovery:       { value: false },
+      constructDefaultAddressSpace: { value: true },
+      allowAnonymous:            { value: true },
+      // Security modes
+      endpointNone:              { value: true },
+      endpointSign:              { value: true },
+      endpointSignEncrypt:       { value: true },
+      // Security policies
+      endpointBasic128Rsa15:     { value: true },
+      endpointBasic256:          { value: true },
+      endpointBasic256Sha256:    { value: true },
+      // Operating limits
+      maxNodesPerBrowse:         { value: 0 },
+      maxNodesPerHistoryReadData: { value: 0 },
+      maxNodesPerHistoryReadEvents: { value: 0 },
+      maxNodesPerHistoryUpdateData: { value: 0 },
+      maxNodesPerRead:           { value: 0 },
+      maxNodesPerWrite:          { value: 0 },
+      maxNodesPerMethodCall:     { value: 0 },
+      maxNodesPerRegisterNodes:  { value: 0 },
+      maxNodesPerNodeManagement: { value: 0 },
+      maxMonitoredItemsPerCall:  { value: 0 },
+      maxNodesPerHistoryUpdateEvents: { value: 0 },
+      maxNodesPerTranslateBrowsePathsToNodeIds: { value: 0 },
+      // Transport settings
+      maxConnectionsPerEndpoint: { value: 20, validate: RED.validators.number() },
+      maxMessageSize:            { value: 4096, validate: RED.validators.number() },
+      maxBufferSize:             { value: 4096, validate: RED.validators.number() },
+      maxSessions:               { value: 20, validate: RED.validators.number() },
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: "opcuanodeLogo.png",
+    label: function () {
+      return this.name || `OPC UA Server :${this.port}`;
+    },
+    labelStyle: function () {
+      return this.name ? "node_label_italic" : "";
+    },
+    paletteLabel: "OPC UA Server",
+    oneditprepare: function () {
+      var tabs = RED.tabs.create({
+        id: "opcua-server-tabs",
+        onchange: function (tab) {
+          $("#opcua-server-tabs-content").children().hide();
+          $("#" + tab.id).show();
+        },
+      });
+      tabs.addTab({ id: "opcua-server-tab-general", label: "General" });
+      tabs.addTab({ id: "opcua-server-tab-security", label: "Security" });
+      tabs.addTab({ id: "opcua-server-tab-limits", label: "Limits" });
+      tabs.addTab({ id: "opcua-server-tab-transport", label: "Transport" });
+    },
+  });
+</script>
+
+<script type="text/html" data-template-name="opcua-server">
+  <div class="form-row">
+    <ul id="opcua-server-tabs" style="min-width: 600px; margin-bottom: 20px;"></ul>
+  </div>
+
+  <div id="opcua-server-tabs-content" style="min-height: 300px;">
+    <!-- ── General Tab ─────────────────────────────────────────── -->
+    <div id="opcua-server-tab-general" style="display:none;">
+      <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="OPC UA Server">
+      </div>
+      <div class="form-row">
+        <label for="node-input-port"><i class="fa fa-plug"></i> Port</label>
+        <input type="number" id="node-input-port" placeholder="53880" min="1" max="65535">
+      </div>
+      <div class="form-row">
+        <label for="node-input-endpoint"><i class="fa fa-globe"></i> Endpoint</label>
+        <input type="text" id="node-input-endpoint" placeholder="UA/NodeREDServer">
+      </div>
+      <div class="form-row">
+        <label for="node-input-users"><i class="fa fa-users"></i> Users File</label>
+        <input type="text" id="node-input-users" placeholder="users.json">
+      </div>
+      <div class="form-row">
+        <label for="node-input-nodesetDir"><i class="fa fa-folder-open"></i> Nodeset Dir</label>
+        <input type="text" id="node-input-nodesetDir" placeholder="Path to custom nodeset XML files">
+      </div>
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <input type="checkbox" id="node-input-autoAcceptUnknownCertificate" style="width:auto;">
+        <label for="node-input-autoAcceptUnknownCertificate" style="width:70%;">
+          Auto-accept unknown certificates
+        </label>
+      </div>
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <input type="checkbox" id="node-input-registerToDiscovery" style="width:auto;">
+        <label for="node-input-registerToDiscovery" style="width:70%;">
+          Register to Discovery Server (LDS)
+        </label>
+      </div>
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <input type="checkbox" id="node-input-constructDefaultAddressSpace" style="width:auto;">
+        <label for="node-input-constructDefaultAddressSpace" style="width:70%;">
+          Construct default address space
+        </label>
+      </div>
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <input type="checkbox" id="node-input-allowAnonymous" style="width:auto;">
+        <label for="node-input-allowAnonymous" style="width:70%;">
+          Allow anonymous access
+        </label>
+      </div>
+    </div>
+
+    <!-- ── Security Tab ────────────────────────────────────────── -->
+    <div id="opcua-server-tab-security" style="display:none;">
+      <h4 style="margin-bottom: 10px;">Security Modes</h4>
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <input type="checkbox" id="node-input-endpointNone" style="width:auto;">
+        <label for="node-input-endpointNone" style="width:70%;">None</label>
+      </div>
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <input type="checkbox" id="node-input-endpointSign" style="width:auto;">
+        <label for="node-input-endpointSign" style="width:70%;">Sign</label>
+      </div>
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <input type="checkbox" id="node-input-endpointSignEncrypt" style="width:auto;">
+        <label for="node-input-endpointSignEncrypt" style="width:70%;">Sign & Encrypt</label>
+      </div>
+
+      <hr>
+
+      <h4 style="margin-bottom: 10px;">Security Policies</h4>
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <input type="checkbox" id="node-input-endpointBasic128Rsa15" style="width:auto;">
+        <label for="node-input-endpointBasic128Rsa15" style="width:70%;">Basic128Rsa15</label>
+      </div>
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <input type="checkbox" id="node-input-endpointBasic256" style="width:auto;">
+        <label for="node-input-endpointBasic256" style="width:70%;">Basic256</label>
+      </div>
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <input type="checkbox" id="node-input-endpointBasic256Sha256" style="width:auto;">
+        <label for="node-input-endpointBasic256Sha256" style="width:70%;">Basic256Sha256</label>
+      </div>
+    </div>
+
+    <!-- ── Limits Tab ──────────────────────────────────────────── -->
+    <div id="opcua-server-tab-limits" style="display:none;">
+      <p style="margin-bottom: 10px; color: #888;">Set to 0 for unlimited (server default).</p>
+      <div class="form-row">
+        <label for="node-input-maxNodesPerBrowse">Browse</label>
+        <input type="number" id="node-input-maxNodesPerBrowse" min="0">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxNodesPerRead">Read</label>
+        <input type="number" id="node-input-maxNodesPerRead" min="0">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxNodesPerWrite">Write</label>
+        <input type="number" id="node-input-maxNodesPerWrite" min="0">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxNodesPerMethodCall">Method Call</label>
+        <input type="number" id="node-input-maxNodesPerMethodCall" min="0">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxMonitoredItemsPerCall">Monitored Items</label>
+        <input type="number" id="node-input-maxMonitoredItemsPerCall" min="0">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxNodesPerRegisterNodes">Register Nodes</label>
+        <input type="number" id="node-input-maxNodesPerRegisterNodes" min="0">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxNodesPerNodeManagement">Node Management</label>
+        <input type="number" id="node-input-maxNodesPerNodeManagement" min="0">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxNodesPerHistoryReadData">History Read</label>
+        <input type="number" id="node-input-maxNodesPerHistoryReadData" min="0">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxNodesPerHistoryReadEvents">History Events</label>
+        <input type="number" id="node-input-maxNodesPerHistoryReadEvents" min="0">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxNodesPerHistoryUpdateData">History Update</label>
+        <input type="number" id="node-input-maxNodesPerHistoryUpdateData" min="0">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxNodesPerHistoryUpdateEvents">History Update Events</label>
+        <input type="number" id="node-input-maxNodesPerHistoryUpdateEvents" min="0">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxNodesPerTranslateBrowsePathsToNodeIds">Translate</label>
+        <input type="number" id="node-input-maxNodesPerTranslateBrowsePathsToNodeIds" min="0">
+      </div>
+    </div>
+
+    <!-- ── Transport Tab ───────────────────────────────────────── -->
+    <div id="opcua-server-tab-transport" style="display:none;">
+      <div class="form-row">
+        <label for="node-input-maxConnectionsPerEndpoint">Connections / Endpoint</label>
+        <input type="number" id="node-input-maxConnectionsPerEndpoint" min="1">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxMessageSize">Max Message Size</label>
+        <input type="number" id="node-input-maxMessageSize" min="1024">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxBufferSize">Max Buffer Size</label>
+        <input type="number" id="node-input-maxBufferSize" min="1024">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxSessions">Max Sessions</label>
+        <input type="number" id="node-input-maxSessions" min="10">
+      </div>
+    </div>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="opcua-server">
+  <p>Creates an OPC UA server that exposes variables, methods, alarms, and files
+  to OPC UA clients.</p>
+
+  <h3>Inputs</h3>
+  <p>The server accepts two types of input messages:</p>
+
+  <h4>Commands (<code>msg.payload.opcuaCommand</code>)</h4>
+  <dl class="message-properties">
+    <dt>restartOPCUAServer</dt><dd>Restart the OPC UA server</dd>
+    <dt>addVariable</dt><dd>Add a variable (msg.topic: <code>ns=1;s=Name;datatype=Double</code>)</dd>
+    <dt>addFolder</dt><dd>Add a folder under the current folder</dd>
+    <dt>setFolder</dt><dd>Set the current parent folder (msg.topic: NodeId)</dd>
+    <dt>deleteNode</dt><dd>Delete a node (msg.payload.nodeId)</dd>
+    <dt>addEquipment</dt><dd>Add an equipment object (msg.payload.nodeName)</dd>
+    <dt>addPhysicalAsset</dt><dd>Add a physical asset (msg.payload.nodeName)</dd>
+    <dt>addMethod</dt><dd>Add a method (msg.browseName, msg.inputArguments, msg.outputArguments)</dd>
+    <dt>bindMethod</dt><dd>Bind a function to a method (msg.topic, msg.code)</dd>
+    <dt>installHistorian</dt><dd>Enable history on a variable (msg.topic: NodeId)</dd>
+    <dt>installDiscreteAlarm</dt><dd>Add a boolean alarm (msg.topic, msg.priority, msg.alarmText)</dd>
+    <dt>installLimitAlarm</dt><dd>Add HH/H/L/LL limit alarm (msg.topic, msg.hh, msg.h, msg.l, msg.ll)</dd>
+    <dt>addExtensionObject</dt><dd>Add an extension object variable</dd>
+    <dt>addFile</dt><dd>Add a file node for OPC UA File Transfer</dd>
+    <dt>registerNamespace</dt><dd>Register a namespace URI (msg.topic)</dd>
+    <dt>getNamespaceIndex</dt><dd>Get namespace index (msg.topic)</dd>
+    <dt>getNamespaces</dt><dd>Get all namespaces</dd>
+    <dt>setUsers</dt><dd>Update user list (msg.payload.users array)</dd>
+    <dt>saveAddressSpace</dt><dd>Save address space to XML (msg.filename)</dd>
+    <dt>loadAddressSpace</dt><dd>Load address space from XML (msg.filename)</dd>
+    <dt>bindVariables</dt><dd>Bind get/set callbacks to all variables</dd>
+  </dl>
+
+  <h4>Variable Updates (<code>msg.payload.messageType = "Variable"</code>)</h4>
+  <dl class="message-properties">
+    <dt>namespace <span class="property-type">number</span></dt><dd>Namespace index</dd>
+    <dt>variableName <span class="property-type">string</span></dt><dd>Variable name or id</dd>
+    <dt>variableValue <span class="property-type">any</span></dt><dd>New value</dd>
+    <dt>datatype <span class="property-type">string</span></dt><dd>OPC UA data type (optional)</dd>
+    <dt>quality <span class="property-type">string</span></dt><dd>StatusCode name (optional)</dd>
+    <dt>sourceTimestamp <span class="property-type">string|Date</span></dt><dd>Source timestamp (optional)</dd>
+  </dl>
+
+  <h3>Outputs</h3>
+  <p>Emits session events (client connect/disconnect) and variable write notifications.</p>
+
+  <h3>Configuration</h3>
+  <ul>
+    <li><b>Port</b> — TCP port for the server (env: SERVER_PORT)</li>
+    <li><b>Users File</b> — JSON file with <code>[{ "username": "...", "password": "..." }]</code></li>
+    <li><b>Nodeset Dir</b> — Directory with custom XML nodeset files</li>
+    <li><b>Security</b> — Choose security modes and policies</li>
+    <li><b>Limits</b> — Operation limits (0 = unlimited)</li>
+    <li><b>Transport</b> — Connection, buffer, and session limits</li>
+  </ul>
+</script>

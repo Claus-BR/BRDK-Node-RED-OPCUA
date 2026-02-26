@@ -1,0 +1,73 @@
+<!--
+  @file opcua-discovery.html
+  @description Editor definition for the OPC UA Discovery node.
+
+  Starts a local OPC UA Discovery Server (LDS) on port 4840 and
+  responds with registered server URLs when triggered.
+-->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     1. NODE REGISTRATION
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/javascript">
+  RED.nodes.registerType("opcua-discovery", {
+    category: "BRDK OPCUA",
+    color: "#3FADB5",
+    defaults: {
+      name: { value: "" },
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: "font-awesome/fa-search",
+    align: "right",
+    label: function () {
+      return this.name || "opcua discovery";
+    },
+    labelStyle: function () {
+      return this.name ? "node_label_italic" : "";
+    },
+    paletteLabel: "opcua discovery",
+  });
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     2. EDIT TEMPLATE
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-template-name="opcua-discovery">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     3. HELP TEXT
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-help-name="opcua-discovery">
+  <p>Starts a local OPC UA Discovery Server (LDS) on port 4840.</p>
+
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt class="optional">discoveryUrl <span class="property-type">string</span></dt>
+    <dd>Discovery endpoint to query. Defaults to <code>opc.tcp://localhost:4840</code>.</dd>
+  </dl>
+
+  <h3>Outputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">array</span></dt>
+    <dd>Array of discovery URL strings for all registered OPC UA servers.</dd>
+  </dl>
+
+  <h3>Details</h3>
+  <p>When deployed, this node automatically starts a Local Discovery Server (LDS)
+  on port 4840. OPC UA servers can register themselves with this discovery server.</p>
+
+  <p>Send any message to trigger a <code>findServers()</code> call, which returns
+  the discovery URLs of all registered servers.</p>
+
+  <p>OPC UA clients (e.g. UaExpert) can query this discovery server to find
+  available OPC UA servers on the network.</p>
+
+  <p><strong>Note:</strong> Port 4840 must be available. On Windows, check with:
+  <code>netstat -ano | findstr :4840</code></p>
+</script>

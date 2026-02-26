@@ -1,0 +1,273 @@
+<!--
+  @file opcua-method.html
+  @description Editor definition for the OPC UA Method node.
+
+  Calls an OPC UA method with up to 3 input arguments and collects output arguments.
+  Arguments configured here can be overridden by msg properties.
+-->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     1. NODE REGISTRATION
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/javascript">
+  RED.nodes.registerType("opcua-method", {
+    category: "BRDK OPCUA",
+    color: "#3FADB5",
+    defaults: {
+      endpoint:   { value: "", required: true, type: "opcua-endpoint" },
+      objectId:   { value: "" },
+      methodId:   { value: "" },
+      name:       { value: "" },
+      arg0name:   { value: "" },
+      arg0type:   { value: "" },
+      arg0typeid: { value: "" },
+      arg0value:  { value: "" },
+      arg1name:   { value: "" },
+      arg1type:   { value: "" },
+      arg1typeid: { value: "" },
+      arg1value:  { value: "" },
+      arg2name:   { value: "" },
+      arg2type:   { value: "" },
+      arg2typeid: { value: "" },
+      arg2value:  { value: "" },
+      out0name:   { value: "" },
+      out0type:   { value: "" },
+      out0typeid: { value: "" },
+      out0value:  { value: "" },
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: "font-awesome/fa-cogs",
+    align: "right",
+    label: function () {
+      return this.name || "opcua method";
+    },
+    labelStyle: function () {
+      return this.name ? "node_label_italic" : "";
+    },
+    paletteLabel: "opcua method",
+    oneditprepare: function () {
+      // Show/hide TypeId fields based on ExtensionObject selection
+      function toggleTypeIdVisibility(prefix) {
+        var typeSelect = $("#node-input-" + prefix + "type");
+        var typeIdField = $("." + prefix + "-typeid-row");
+
+        function update() {
+          if (typeSelect.val() === "ExtensionObject") {
+            typeIdField.show();
+          } else {
+            typeIdField.hide();
+          }
+        }
+
+        update();
+        typeSelect.on("change", update);
+      }
+
+      toggleTypeIdVisibility("arg0");
+      toggleTypeIdVisibility("arg1");
+      toggleTypeIdVisibility("arg2");
+      toggleTypeIdVisibility("out0");
+    },
+  });
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     2. EDIT TEMPLATE
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-template-name="opcua-method">
+
+  <!-- Endpoint -->
+  <div class="form-row">
+    <label for="node-input-endpoint"><i class="fa fa-globe"></i> Endpoint</label>
+    <input type="text" id="node-input-endpoint">
+  </div>
+
+  <!-- Object NodeId -->
+  <div class="form-row">
+    <label for="node-input-objectId"><i class="fa fa-cube"></i> Object Id</label>
+    <input type="text" id="node-input-objectId" placeholder="ns=5;s=MyDevice">
+  </div>
+
+  <!-- Method NodeId -->
+  <div class="form-row">
+    <label for="node-input-methodId"><i class="fa fa-cog"></i> Method Id</label>
+    <input type="text" id="node-input-methodId" placeholder="ns=5;s=MyMethod">
+  </div>
+
+  <hr>
+  <h4 style="margin-bottom: 10px;">Input Arguments</h4>
+
+  <!-- Argument 0 -->
+  <div class="form-row" style="display: flex; align-items: center; gap: 6px;">
+    <label style="width: 50px;">Arg 0</label>
+    <input type="text" id="node-input-arg0name" placeholder="Name" style="width: 15%;">
+    <select id="node-input-arg0type" style="width: 20%;">
+      <option value="">—</option>
+      <option value="String">String</option>
+      <option value="Double">Double</option>
+      <option value="Float">Float</option>
+      <option value="Int32">Int32</option>
+      <option value="Int16">Int16</option>
+      <option value="SByte">SByte</option>
+      <option value="UInt32">UInt32</option>
+      <option value="UInt16">UInt16</option>
+      <option value="Byte">Byte</option>
+      <option value="Boolean">Boolean</option>
+      <option value="DateTime">DateTime</option>
+      <option value="NodeId">NodeId</option>
+      <option value="ExtensionObject">ExtensionObject</option>
+      <option value="LocalizedText">LocalizedText</option>
+    </select>
+    <input type="text" id="node-input-arg0value" placeholder="Value" style="flex: 1;">
+  </div>
+  <div class="form-row arg0-typeid-row" style="display: none; padding-left: 56px;">
+    <label for="node-input-arg0typeid" style="width: auto;">TypeId</label>
+    <input type="text" id="node-input-arg0typeid" placeholder="ns=2;i=1234" style="width: 60%;">
+  </div>
+
+  <!-- Argument 1 -->
+  <div class="form-row" style="display: flex; align-items: center; gap: 6px;">
+    <label style="width: 50px;">Arg 1</label>
+    <input type="text" id="node-input-arg1name" placeholder="Name" style="width: 15%;">
+    <select id="node-input-arg1type" style="width: 20%;">
+      <option value="">—</option>
+      <option value="String">String</option>
+      <option value="Double">Double</option>
+      <option value="Float">Float</option>
+      <option value="Int32">Int32</option>
+      <option value="Int16">Int16</option>
+      <option value="SByte">SByte</option>
+      <option value="UInt32">UInt32</option>
+      <option value="UInt16">UInt16</option>
+      <option value="Byte">Byte</option>
+      <option value="Boolean">Boolean</option>
+      <option value="DateTime">DateTime</option>
+      <option value="NodeId">NodeId</option>
+      <option value="ExtensionObject">ExtensionObject</option>
+      <option value="LocalizedText">LocalizedText</option>
+    </select>
+    <input type="text" id="node-input-arg1value" placeholder="Value" style="flex: 1;">
+  </div>
+  <div class="form-row arg1-typeid-row" style="display: none; padding-left: 56px;">
+    <label for="node-input-arg1typeid" style="width: auto;">TypeId</label>
+    <input type="text" id="node-input-arg1typeid" placeholder="ns=2;i=1234" style="width: 60%;">
+  </div>
+
+  <!-- Argument 2 -->
+  <div class="form-row" style="display: flex; align-items: center; gap: 6px;">
+    <label style="width: 50px;">Arg 2</label>
+    <input type="text" id="node-input-arg2name" placeholder="Name" style="width: 15%;">
+    <select id="node-input-arg2type" style="width: 20%;">
+      <option value="">—</option>
+      <option value="String">String</option>
+      <option value="Double">Double</option>
+      <option value="Float">Float</option>
+      <option value="Int32">Int32</option>
+      <option value="Int16">Int16</option>
+      <option value="SByte">SByte</option>
+      <option value="UInt32">UInt32</option>
+      <option value="UInt16">UInt16</option>
+      <option value="Byte">Byte</option>
+      <option value="Boolean">Boolean</option>
+      <option value="DateTime">DateTime</option>
+      <option value="NodeId">NodeId</option>
+      <option value="ExtensionObject">ExtensionObject</option>
+      <option value="LocalizedText">LocalizedText</option>
+    </select>
+    <input type="text" id="node-input-arg2value" placeholder="Value" style="flex: 1;">
+  </div>
+  <div class="form-row arg2-typeid-row" style="display: none; padding-left: 56px;">
+    <label for="node-input-arg2typeid" style="width: auto;">TypeId</label>
+    <input type="text" id="node-input-arg2typeid" placeholder="ns=2;i=1234" style="width: 60%;">
+  </div>
+
+  <hr>
+  <h4 style="margin-bottom: 10px;">Output Argument (expected)</h4>
+
+  <!-- Output 0 -->
+  <div class="form-row" style="display: flex; align-items: center; gap: 6px;">
+    <label style="width: 50px;">Out 0</label>
+    <input type="text" id="node-input-out0name" placeholder="Name" style="width: 15%;">
+    <select id="node-input-out0type" style="width: 20%;">
+      <option value="">—</option>
+      <option value="String">String</option>
+      <option value="Double">Double</option>
+      <option value="Float">Float</option>
+      <option value="Int32">Int32</option>
+      <option value="Int16">Int16</option>
+      <option value="SByte">SByte</option>
+      <option value="UInt32">UInt32</option>
+      <option value="UInt16">UInt16</option>
+      <option value="Byte">Byte</option>
+      <option value="Boolean">Boolean</option>
+      <option value="DateTime">DateTime</option>
+      <option value="NodeId">NodeId</option>
+      <option value="ExtensionObject">ExtensionObject</option>
+      <option value="LocalizedText">LocalizedText</option>
+    </select>
+    <input type="text" id="node-input-out0value" placeholder="Value" style="flex: 1;">
+  </div>
+  <div class="form-row out0-typeid-row" style="display: none; padding-left: 56px;">
+    <label for="node-input-out0typeid" style="width: auto;">TypeId</label>
+    <input type="text" id="node-input-out0typeid" placeholder="ns=2;i=1234" style="width: 60%;">
+  </div>
+
+  <hr>
+
+  <!-- Name -->
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     3. HELP TEXT
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-help-name="opcua-method">
+  <p>Calls an OPC UA method on a server object.</p>
+
+  <h3>Configuration</h3>
+  <dl class="message-properties">
+    <dt>Object Id <span class="property-type">string</span></dt>
+    <dd>NodeId of the object that owns the method (e.g. <code>ns=5;s=MyDevice</code>).</dd>
+    <dt>Method Id <span class="property-type">string</span></dt>
+    <dd>NodeId of the method to call (e.g. <code>ns=5;s=MyMethod</code>).</dd>
+    <dt>Arguments</dt>
+    <dd>Up to 3 input arguments and 1 expected output argument. Each has a name,
+    data type, and default value. For <code>ExtensionObject</code> types, provide
+    the TypeId (NodeId of the type definition) and a JSON object as the value.</dd>
+  </dl>
+
+  <h3>Inputs</h3>
+  <p>Input message properties override the configured values:</p>
+  <dl class="message-properties">
+    <dt class="optional">objectId <span class="property-type">string</span></dt>
+    <dd>NodeId of the parent object.</dd>
+    <dt class="optional">methodId <span class="property-type">string</span></dt>
+    <dd>NodeId of the method to call.</dd>
+    <dt class="optional">inputArguments <span class="property-type">array</span></dt>
+    <dd>Array of <code>{ dataType, value, typeid? }</code> objects.</dd>
+  </dl>
+
+  <h3>Outputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">any | array</span></dt>
+    <dd>Single output argument value, or array of values if multiple outputs.</dd>
+    <dt>result <span class="property-type">object</span></dt>
+    <dd>Full <code>CallMethodResult</code> — includes statusCode, outputArguments,
+    inputArgumentResults, and diagnosticInfo.</dd>
+    <dt>output <span class="property-type">array</span></dt>
+    <dd>Raw output arguments array with full Variant information.</dd>
+  </dl>
+
+  <h3>Details</h3>
+  <p>This node creates a connection to the OPC UA server, calls the specified
+  method, and disconnects. Multiple messages arriving in quick succession are
+  queued and executed sequentially within the same session.</p>
+
+  <p>Supported data types: String, Double, Float, Int32, Int16, SByte, UInt32,
+  UInt16, Byte, Boolean, DateTime, NodeId, ExtensionObject, LocalizedText.</p>
+</script>

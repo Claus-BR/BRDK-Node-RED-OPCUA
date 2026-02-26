@@ -1,0 +1,239 @@
+<!--
+  @file opcua-rights.html
+  @description Editor definition for the OPC UA Rights node.
+
+  Configures OPC UA access levels, user roles, and permissions.
+  Enriches messages with these flags for downstream use (e.g. server variable creation).
+-->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     1. NODE REGISTRATION
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/javascript">
+  RED.nodes.registerType("opcua-rights", {
+    category: "BRDK OPCUA",
+    color: "#3FADB5",
+    defaults: {
+      accessLevelCurrentRead:    { value: true },
+      accessLevelCurrentWrite:   { value: true },
+      accessLevelStatusWrite:    { value: false },
+      accessLevelHistoryRead:    { value: false },
+      accessLevelHistoryWrite:   { value: false },
+      accessLevelSemanticChange: { value: false },
+      role:                      { value: "a" },
+      permissionBrowse:          { value: true },
+      permissionRead:            { value: true },
+      permissionWrite:           { value: true },
+      permissionWriteAttribute:  { value: false },
+      permissionReadRole:        { value: false },
+      permissionWriteRole:       { value: false },
+      permissionReadHistory:     { value: false },
+      permissionWriteHistory:    { value: false },
+      permissionInsertHistory:   { value: false },
+      permissionModifyHistory:   { value: false },
+      permissionDeleteHistory:   { value: false },
+      permissionReceiveEvents:   { value: false },
+      permissionCall:            { value: false },
+      permissionAddReference:    { value: false },
+      permissionRemoveReference: { value: false },
+      permissionDeleteNode:      { value: false },
+      permissionAddNode:         { value: false },
+      name:                      { value: "" },
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: "font-awesome/fa-lock",
+    align: "right",
+    label: function () {
+      return this.name || "opcua rights";
+    },
+    labelStyle: function () {
+      return this.name ? "node_label_italic" : "";
+    },
+    paletteLabel: "opcua rights",
+  });
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     2. EDIT TEMPLATE
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-template-name="opcua-rights">
+
+  <h4 style="margin-bottom: 10px;">Access Level</h4>
+
+  <div class="form-row">
+    <label for="node-input-accessLevelCurrentRead" style="width: 72%;"><i class="fa fa-eye"></i> Current Read</label>
+    <input type="checkbox" id="node-input-accessLevelCurrentRead" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-accessLevelCurrentWrite" style="width: 72%;"><i class="fa fa-pencil"></i> Current Write</label>
+    <input type="checkbox" id="node-input-accessLevelCurrentWrite" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-accessLevelStatusWrite" style="width: 72%;"><i class="fa fa-pencil-square"></i> Status Write</label>
+    <input type="checkbox" id="node-input-accessLevelStatusWrite" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-accessLevelHistoryRead" style="width: 72%;"><i class="fa fa-history"></i> History Read</label>
+    <input type="checkbox" id="node-input-accessLevelHistoryRead" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-accessLevelHistoryWrite" style="width: 72%;"><i class="fa fa-history"></i> History Write</label>
+    <input type="checkbox" id="node-input-accessLevelHistoryWrite" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-accessLevelSemanticChange" style="width: 72%;"><i class="fa fa-refresh"></i> Semantic Change</label>
+    <input type="checkbox" id="node-input-accessLevelSemanticChange" style="width: auto;">
+  </div>
+
+  <hr>
+  <h4 style="margin-bottom: 10px;">Role</h4>
+
+  <div class="form-row">
+    <label for="node-input-role"><i class="fa fa-user"></i> User Role</label>
+    <select id="node-input-role" style="width: 60%;">
+      <option value="a">Anonymous</option>
+      <option value="u">Authenticated User</option>
+      <option value="b">Observer</option>
+      <option value="e">Engineer</option>
+      <option value="o">Operator</option>
+      <option value="c">Configure Admin</option>
+      <option value="s">Security Admin</option>
+      <option value="v">Supervisor</option>
+    </select>
+  </div>
+
+  <hr>
+  <h4 style="margin-bottom: 10px;">Permissions</h4>
+
+  <div class="form-row">
+    <label for="node-input-permissionBrowse" style="width: 72%;"><i class="fa fa-check-square-o"></i> Browse</label>
+    <input type="checkbox" id="node-input-permissionBrowse" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionRead" style="width: 72%;"><i class="fa fa-check-square-o"></i> Read</label>
+    <input type="checkbox" id="node-input-permissionRead" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionWrite" style="width: 72%;"><i class="fa fa-check-square-o"></i> Write</label>
+    <input type="checkbox" id="node-input-permissionWrite" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionWriteAttribute" style="width: 72%;"><i class="fa fa-check-square-o"></i> Write Attribute</label>
+    <input type="checkbox" id="node-input-permissionWriteAttribute" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionReadRole" style="width: 72%;"><i class="fa fa-check-square-o"></i> Read Role Permissions</label>
+    <input type="checkbox" id="node-input-permissionReadRole" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionWriteRole" style="width: 72%;"><i class="fa fa-check-square-o"></i> Write Role Permissions</label>
+    <input type="checkbox" id="node-input-permissionWriteRole" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionReadHistory" style="width: 72%;"><i class="fa fa-check-square-o"></i> Read History</label>
+    <input type="checkbox" id="node-input-permissionReadHistory" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionWriteHistory" style="width: 72%;"><i class="fa fa-check-square-o"></i> Write History</label>
+    <input type="checkbox" id="node-input-permissionWriteHistory" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionInsertHistory" style="width: 72%;"><i class="fa fa-check-square-o"></i> Insert History</label>
+    <input type="checkbox" id="node-input-permissionInsertHistory" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionModifyHistory" style="width: 72%;"><i class="fa fa-check-square-o"></i> Modify History</label>
+    <input type="checkbox" id="node-input-permissionModifyHistory" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionDeleteHistory" style="width: 72%;"><i class="fa fa-check-square-o"></i> Delete History</label>
+    <input type="checkbox" id="node-input-permissionDeleteHistory" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionReceiveEvents" style="width: 72%;"><i class="fa fa-check-square-o"></i> Receive Events</label>
+    <input type="checkbox" id="node-input-permissionReceiveEvents" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionCall" style="width: 72%;"><i class="fa fa-check-square-o"></i> Call Methods</label>
+    <input type="checkbox" id="node-input-permissionCall" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionAddReference" style="width: 72%;"><i class="fa fa-check-square-o"></i> Add Reference</label>
+    <input type="checkbox" id="node-input-permissionAddReference" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionRemoveReference" style="width: 72%;"><i class="fa fa-check-square-o"></i> Remove Reference</label>
+    <input type="checkbox" id="node-input-permissionRemoveReference" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionDeleteNode" style="width: 72%;"><i class="fa fa-check-square-o"></i> Delete Node</label>
+    <input type="checkbox" id="node-input-permissionDeleteNode" style="width: auto;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-permissionAddNode" style="width: 72%;"><i class="fa fa-check-square-o"></i> Add Node</label>
+    <input type="checkbox" id="node-input-permissionAddNode" style="width: auto;">
+  </div>
+
+  <hr>
+
+  <!-- Name -->
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     3. HELP TEXT
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-help-name="opcua-rights">
+  <p>Configures OPC UA access levels, user roles, and permissions for
+  server-side variable or object creation.</p>
+
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt class="optional">permissions <span class="property-type">array</span></dt>
+    <dd>Existing permissions array — if present, this node's permissions are appended
+    (supports chaining multiple Rights nodes for multi-role configurations).</dd>
+  </dl>
+
+  <h3>Outputs</h3>
+  <dl class="message-properties">
+    <dt>accessLevel <span class="property-type">number</span></dt>
+    <dd>Numeric access level flag built from the selected checkboxes.</dd>
+    <dt>userAccessLevel <span class="property-type">number</span></dt>
+    <dd>Same as accessLevel (user access level).</dd>
+    <dt>accessRestrictions <span class="property-type">number</span></dt>
+    <dd>Access restrictions flag (currently always <code>None</code>).</dd>
+    <dt>permissions <span class="property-type">array</span></dt>
+    <dd>Array of <code>{ roleId, permissions }</code> objects. If chaining
+    multiple Rights nodes, each one adds its entry to the array.</dd>
+  </dl>
+
+  <h3>Configuration</h3>
+
+  <h4>Access Level</h4>
+  <p>Controls what operations are allowed on the variable:</p>
+  <ul>
+    <li><strong>Current Read / Write</strong> — read/write the current value</li>
+    <li><strong>Status Write</strong> — write the status code</li>
+    <li><strong>History Read / Write</strong> — access historical data</li>
+    <li><strong>Semantic Change</strong> — semantic meaning may change</li>
+  </ul>
+
+  <h4>User Role</h4>
+  <p>Assigns a well-known OPC UA role: Anonymous, Authenticated User, Observer,
+  Engineer, Operator, Configure Admin, Security Admin, or Supervisor.</p>
+
+  <h4>Permissions</h4>
+  <p>17 individual permission flags that define what the assigned role can do:
+  Browse, Read, Write, Write Attribute, Read/Write Role Permissions,
+  Read/Write/Insert/Modify/Delete History, Receive Events, Call Methods,
+  Add/Remove Reference, Delete/Add Node.</p>
+
+  <h3>Chaining</h3>
+  <p>Connect multiple Rights nodes in series to build a multi-role permissions
+  array. Each node appends its <code>{ roleId, permissions }</code> entry.</p>
+</script>
