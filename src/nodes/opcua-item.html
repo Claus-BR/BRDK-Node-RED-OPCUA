@@ -99,7 +99,7 @@
   <!-- Static value (optional) -->
   <div class="form-row">
     <label for="node-input-value"><i class="fa fa-pencil"></i> Value</label>
-    <input type="text" id="node-input-value" placeholder="Leave empty to use msg.payload">
+    <input type="text" id="node-input-value" placeholder="Leave empty for read-only use">
   </div>
 
   <!-- Display name -->
@@ -118,22 +118,17 @@
 
   <h3>Inputs</h3>
   <dl class="message-properties">
-    <dt class="optional">payload <span class="property-type">any</span></dt>
-    <dd>Value to write (overrides the static value configured in the node).</dd>
     <dt class="optional">datatype <span class="property-type">string</span></dt>
-    <dd>Data type override (if not configured in the node).</dd>
+    <dd>Data type fallback (used if not configured in the node).</dd>
   </dl>
 
   <h3>Outputs</h3>
   <dl class="message-properties">
+    <dt>items <span class="property-type">array</span></dt>
+    <dd>Array of one item: <code>[{ nodeId, datatype, browseName, value? }]</code>.
+    The <code>value</code> property is included only when a static value is configured.</dd>
     <dt>topic <span class="property-type">string</span></dt>
     <dd>The OPC UA NodeId address (e.g. <code>ns=2;s=MyVariable</code>).</dd>
-    <dt>datatype <span class="property-type">string</span></dt>
-    <dd>The OPC UA data type name (e.g. <code>Double</code>, <code>Int32 Array</code>).</dd>
-    <dt>browseName <span class="property-type">string</span></dt>
-    <dd>The human-readable display name.</dd>
-    <dt>payload <span class="property-type">any</span></dt>
-    <dd>The value, coerced to the correct type for write operations.</dd>
   </dl>
 
   <h3>Details</h3>
@@ -149,8 +144,11 @@
 
   <h4>Value handling</h4>
   <ul>
-    <li>If <b>Value</b> is set and <code>msg.payload</code> is empty, the static value is used.</li>
-    <li>If <code>msg.payload</code> has content, it overrides the static value.</li>
+    <li>If <b>Value</b> is set, it is coerced to the correct OPC UA type and included
+    in the item's <code>value</code> property (for write operations).</li>
+    <li>Leave <b>Value</b> empty for read-only or subscribe operations.</li>
+    <li>For dynamic writes, set <code>msg.items[0].value</code> via a <b>Function</b> node
+    before the message reaches the Client.</li>
     <li>Array values can be provided as comma-separated strings: <code>1,2,3,4,5</code>.</li>
   </ul>
 </script>

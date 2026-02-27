@@ -46,6 +46,7 @@
 
       // ── Items list rendering ───────────────────────────────────────
       var $list = $("#smart-item-list");
+      var $valuesList = $("#smart-item-values-list");
 
       function renderItems() {
         $list.empty();
@@ -58,9 +59,31 @@
           $remove.on("click", function () {
             items.splice(idx, 1);
             renderItems();
+            renderValues();
           });
           $row.append($remove);
           $list.append($row);
+        });
+        renderValues();
+      }
+
+      function renderValues() {
+        $valuesList.empty();
+        if (items.length === 0) {
+          $valuesList.append('<div class="smart-item-values-empty">No items configured</div>');
+          return;
+        }
+        items.forEach(function (item, idx) {
+          var label = item.browseName || item.nodeId;
+          var $row = $('<div class="smart-item-value-row"></div>');
+          $row.append('<span class="smart-item-value-label" title="' + item.nodeId + '">' + label + '</span>');
+          var $input = $('<input type="text" class="smart-item-value-input" placeholder="(no value)">');
+          $input.val(item.value || '');
+          $input.on("change", function () {
+            items[idx].value = $(this).val();
+          });
+          $row.append($input);
+          $valuesList.append($row);
         });
       }
 
@@ -74,6 +97,7 @@
           nodeId: nodeId,
           datatype: $("#smart-item-manual-datatype").val() || "",
           browseName: "",
+          value: "",
         });
         $("#smart-item-manual-nodeId").val("");
         renderItems();
@@ -259,8 +283,67 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .smart-item-value {
+    width: 80px;
+    min-width: 60px;
+    padding: 1px 4px;
+    font-size: 11px;
+    border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+    border-radius: 3px;
+    background: var(--red-ui-form-input-background-color, #fff);
+  }
+  .smart-item-value::placeholder {
+    font-style: italic;
+    opacity: 0.5;
+  }
   .smart-item-remove {
     flex-shrink: 0;
+  }
+
+  /* ── Values list ────────────────────────────────────────────────── */
+  #smart-item-values-list {
+    border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+    border-radius: 4px;
+    max-height: 180px;
+    overflow-y: auto;
+    margin-bottom: 8px;
+    background: var(--red-ui-form-input-background-color, #fff);
+  }
+  .smart-item-value-row {
+    display: flex;
+    align-items: center;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);
+    font-size: 12px;
+    gap: 8px;
+  }
+  .smart-item-value-row:last-child { border-bottom: none; }
+  .smart-item-value-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .smart-item-value-input {
+    width: 120px;
+    min-width: 80px;
+    padding: 2px 6px;
+    font-size: 12px;
+    border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+    border-radius: 3px;
+    background: var(--red-ui-form-input-background-color, #fff);
+  }
+  .smart-item-value-input::placeholder {
+    font-style: italic;
+    opacity: 0.5;
+  }
+  .smart-item-values-empty {
+    padding: 8px;
+    color: var(--red-ui-text-color-info, #888);
+    font-style: italic;
+    font-size: 12px;
+    text-align: center;
   }
 
   /* ── Manual add row ─────────────────────────────────────────────── */
@@ -429,6 +512,12 @@
     </div>
   </div>
 
+  <!-- Values list -->
+  <div class="form-row">
+    <label style="width: 100%; margin-bottom: 4px;"><i class="fa fa-pencil"></i> Values <span style="font-weight:normal; font-size:11px; color:#888;"> (for write operations)</span></label>
+    <div id="smart-item-values-list"></div>
+  </div>
+
   <!-- Tree browser -->
   <div class="form-row">
     <label style="width: 100%; margin-bottom: 4px;">
@@ -470,7 +559,8 @@
   <dl class="message-properties">
     <dt>msg.items <span class="property-type">array</span></dt>
     <dd>Array of <code>{ nodeId, datatype, browseName, value? }</code> objects.
-    Always an array, even for a single item.</dd>
+    Always an array, even for a single item. The <code>value</code> property is
+    included only when a static value is configured for the item.</dd>
     <dt>msg.topic <span class="property-type">string</span></dt>
     <dd>The first item's NodeId (for display / convenience).</dd>
   </dl>
@@ -478,8 +568,11 @@
   <h3>Usage</h3>
   <p>Place this node before an <b>OPC UA Client</b> node. For <code>read</code>
   or <code>subscribe</code> actions, the Smart Item provides the item metadata.
-  For <code>write</code>, set <code>msg.payload</code> to the value you want to write
-  (for single-item nodes, the payload is coerced and placed into the item's <code>value</code>).</p>
+  For <code>write</code>, set a static value per item in the editor. The value is
+  coerced to the correct OPC UA type based on the item's datatype. Leave the value
+  empty for items that are only used for reading.</p>
+  <p>For dynamic writes (values determined at runtime), use a <b>Function</b> node
+  to set <code>msg.items[n].value</code> before the message reaches the Client node.</p>
 
   <h3>Endpoint</h3>
   <p>The endpoint is required for the treeview browser. It uses the same connection

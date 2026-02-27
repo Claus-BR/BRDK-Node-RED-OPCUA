@@ -6,10 +6,9 @@
  *   - `msg.items`  — always an array of one item: `[{ nodeId, datatype, browseName, value? }]`
  *   - `msg.topic`  — the OPC UA NodeId address (for display / downstream compat)
  *
- * If the node has a static value configured AND `msg.payload` is empty,
- * the static value is used as the item value. Otherwise the incoming
- * `msg.payload` is coerced and set as the item value.
- * When no value is present (read-only use), `value` is omitted from the item.
+ * If the node has a static value configured, it is coerced and included
+ * as the item's `value`. Otherwise `value` is omitted (read-only use).
+ * For dynamic writes, set `msg.items[0].value` via a Function node upstream.
  */
 
 "use strict";
@@ -44,16 +43,11 @@ module.exports = function (RED) {
         browseName: node.name,
       };
 
-      // Determine the raw value to coerce
-      const hasPayload = msg.payload !== undefined && msg.payload !== null && msg.payload !== "";
+      // Include static value if configured (for write operations)
       const hasStaticValue = node.value !== undefined && node.value !== null && node.value !== "";
-
-      if (hasPayload) {
-        item.value = coerceValue(effectiveType, msg.payload);
-      } else if (hasStaticValue) {
+      if (hasStaticValue) {
         item.value = coerceValue(effectiveType, node.value);
       }
-      // If neither, value is omitted (read-only operation)
 
       // Always output items as an array
       msg.items = [item];

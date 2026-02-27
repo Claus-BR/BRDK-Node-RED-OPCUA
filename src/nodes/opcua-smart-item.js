@@ -67,9 +67,9 @@ module.exports = function (RED) {
           browseName: item.browseName || "",
         };
 
-        // For single-item write operations, coerce msg.payload into the item value
-        if (node.items.length === 1 && msg.payload !== undefined && msg.payload !== null && msg.payload !== "") {
-          itemObj.value = coerceValue(item.datatype || "", msg.payload);
+        // Include per-item static value if configured (for write operations)
+        if (item.value !== undefined && item.value !== null && item.value !== "") {
+          itemObj.value = coerceValue(item.datatype || "", item.value);
         }
 
         return itemObj;

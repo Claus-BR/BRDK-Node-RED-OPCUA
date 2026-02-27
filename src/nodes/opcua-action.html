@@ -1,0 +1,351 @@
+<!--
+  @file opcua-action.html
+  @description Editor definition for the OPC UA Action node.
+
+  Sets msg.action and action-specific configuration for downstream OPC UA Client nodes.
+-->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     1. NODE REGISTRATION
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/javascript">
+  RED.nodes.registerType("opcua-action", {
+    category: "BRDK OPCUA",
+    color: "#3FADB5",
+    defaults: {
+      action:              { value: "read", required: true },
+      name:                { value: "" },
+      // Subscribe / Monitor / Events
+      time:                { value: 10 },
+      timeUnit:            { value: "s" },
+      queueSize:           { value: 10 },
+      // Monitor only
+      deadbandtype:        { value: "a" },
+      deadbandvalue:       { value: 1 },
+      // Events only
+      customEventFields:   { value: "" },
+      // Browse
+      collect:             { value: false },
+      // History
+      aggregate:           { value: "raw" },
+      numValuesPerNode:    { value: 1000 },
+      processingInterval:  { value: 3600000 },
+      returnBounds:        { value: false },
+      // Acknowledge
+      comment:             { value: "Acknowledged from Node-RED" },
+      // Method
+      objectId:            { value: "" },
+      methodId:            { value: "" },
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: "font-awesome/fa-bolt",
+    label: function () {
+      return this.name || this.action || "opcua action";
+    },
+    labelStyle: function () {
+      return this.name ? "node_label_italic" : "";
+    },
+    paletteLabel: "opcua action",
+
+    oneditprepare: function () {
+      // Ensure defaults for properties added after node creation
+      var defaults = {
+        time: 10, timeUnit: "s", queueSize: 10,
+        deadbandtype: "a", deadbandvalue: 1,
+        customEventFields: "", collect: false,
+        aggregate: "raw", numValuesPerNode: 1000,
+        processingInterval: 3600000, returnBounds: false,
+        comment: "Acknowledged from Node-RED",
+        objectId: "", methodId: "",
+      };
+      var self = this;
+      Object.keys(defaults).forEach(function (key) {
+        var inputId = "#node-input-" + key;
+        var $el = $(inputId);
+        if ($el.length && ($el.val() === "" || $el.val() === null || $el.val() === undefined)) {
+          var val = self[key] !== undefined ? self[key] : defaults[key];
+          if ($el.is(":checkbox")) {
+            $el.prop("checked", !!val);
+          } else {
+            $el.val(val);
+          }
+        }
+      });
+
+      function updateVisibility() {
+        var action = $("#node-input-action").val();
+
+        var isSubLike  = ["subscribe", "events", "monitor"].includes(action);
+        var isMonitor  = action === "monitor";
+        var isEvents   = action === "events";
+        var isBrowse   = action === "browse";
+        var isHistory  = action === "history";
+        var isAck      = action === "acknowledge";
+        var isMethod   = action === "method";
+
+        $(".action-interval-row").toggle(isSubLike);
+        $(".action-queuesize-row").toggle(isSubLike);
+        $(".action-deadband-row").toggle(isMonitor);
+        $(".action-eventfields-row").toggle(isEvents);
+        $(".action-browse-row").toggle(isBrowse);
+        $(".action-history-row").toggle(isHistory);
+        $(".action-history-aggregate-row").toggle(isHistory);
+        $(".action-acknowledge-row").toggle(isAck);
+        $(".action-method-row").toggle(isMethod);
+
+        // Show processingInterval only for non-raw aggregates
+        if (isHistory) {
+          var agg = $("#node-input-aggregate").val();
+          $(".action-history-processing-row").toggle(agg !== "raw");
+        } else {
+          $(".action-history-processing-row").toggle(false);
+        }
+      }
+
+      $("#node-input-action").on("change", updateVisibility);
+      $("#node-input-aggregate").on("change", updateVisibility);
+      updateVisibility();
+    },
+  });
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     2. EDIT TEMPLATE
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-template-name="opcua-action">
+
+  <!-- Action -->
+  <div class="form-row">
+    <label for="node-input-action"><i class="fa fa-bolt"></i> Action</label>
+    <select id="node-input-action">
+      <optgroup label="Data Access">
+        <option value="read">Read</option>
+        <option value="write">Write</option>
+      </optgroup>
+      <optgroup label="Subscriptions">
+        <option value="subscribe">Subscribe</option>
+        <option value="monitor">Monitor (Deadband)</option>
+        <option value="unsubscribe">Unsubscribe</option>
+        <option value="deletesubscription">Delete Subscription</option>
+      </optgroup>
+      <optgroup label="Browsing">
+        <option value="browse">Browse</option>
+        <option value="info">Info (All Attributes)</option>
+      </optgroup>
+      <optgroup label="Events">
+        <option value="events">Events</option>
+        <option value="acknowledge">Acknowledge</option>
+      </optgroup>
+      <optgroup label="Methods">
+        <option value="method">Call Method</option>
+      </optgroup>
+      <optgroup label="History">
+        <option value="history">History Read</option>
+      </optgroup>
+      <optgroup label="File Transfer">
+        <option value="readfile">Read File</option>
+        <option value="writefile">Write File</option>
+      </optgroup>
+      <optgroup label="Advanced">
+        <option value="build">Build ExtensionObject</option>
+        <option value="register">Register Nodes</option>
+        <option value="unregister">Unregister Nodes</option>
+      </optgroup>
+      <optgroup label="Connection">
+        <option value="connect">Connect</option>
+        <option value="disconnect">Disconnect</option>
+        <option value="reconnect">Reconnect</option>
+      </optgroup>
+    </select>
+  </div>
+
+  <!-- ── Subscribe / Monitor / Events: Interval ──────────────────────── -->
+  <div class="form-row action-interval-row" style="display: none;">
+    <label for="node-input-time"><i class="fa fa-clock-o"></i> Interval</label>
+    <input type="number" id="node-input-time" style="width: 80px;" min="1" placeholder="10">
+    <select id="node-input-timeUnit" style="width: 100px;">
+      <option value="ms">milliseconds</option>
+      <option value="s">seconds</option>
+      <option value="m">minutes</option>
+      <option value="h">hours</option>
+    </select>
+  </div>
+
+  <!-- ── Subscribe / Monitor / Events: Queue Size ────────────────────── -->
+  <div class="form-row action-queuesize-row" style="display: none;">
+    <label for="node-input-queueSize"><i class="fa fa-list-ol"></i> Queue Size</label>
+    <input type="number" id="node-input-queueSize" style="width: 80px;" min="0" placeholder="10">
+  </div>
+
+  <!-- ── Monitor: Deadband ───────────────────────────────────────────── -->
+  <div class="form-row action-deadband-row" style="display: none;">
+    <label for="node-input-deadbandtype"><i class="fa fa-filter"></i> Deadband</label>
+    <select id="node-input-deadbandtype" style="width: 100px;">
+      <option value="a">Absolute</option>
+      <option value="p">Percent</option>
+    </select>
+    <input type="number" id="node-input-deadbandvalue" style="width: 80px;" step="0.1" min="0" placeholder="1">
+  </div>
+
+  <!-- ── Events: Custom Fields ───────────────────────────────────────── -->
+  <div class="form-row action-eventfields-row" style="display: none;">
+    <label for="node-input-customEventFields"><i class="fa fa-tags"></i> Custom Fields</label>
+    <input type="text" id="node-input-customEventFields" placeholder="Field1, Field2, ...">
+  </div>
+
+  <!-- ── Browse: Collect Mode ────────────────────────────────────────── -->
+  <div class="form-row action-browse-row" style="display: none;">
+    <label for="node-input-collect"><i class="fa fa-sitemap"></i> Collect</label>
+    <input type="checkbox" id="node-input-collect" style="width: auto; margin-left: 5px;">
+    <span style="margin-left: 5px;">Collect all references into a single message</span>
+  </div>
+
+  <!-- ── History: Aggregate ──────────────────────────────────────────── -->
+  <div class="form-row action-history-aggregate-row" style="display: none;">
+    <label for="node-input-aggregate"><i class="fa fa-bar-chart"></i> Aggregate</label>
+    <select id="node-input-aggregate">
+      <option value="raw">Raw</option>
+      <option value="min">Minimum</option>
+      <option value="max">Maximum</option>
+      <option value="ave">Average</option>
+      <option value="interpolative">Interpolative</option>
+    </select>
+  </div>
+
+  <!-- ── History: Settings ───────────────────────────────────────────── -->
+  <div class="form-row action-history-row" style="display: none;">
+    <label for="node-input-numValuesPerNode"><i class="fa fa-sort-numeric-asc"></i> Max Values</label>
+    <input type="number" id="node-input-numValuesPerNode" style="width: 100px;" min="1" placeholder="1000">
+  </div>
+
+  <div class="form-row action-history-processing-row" style="display: none;">
+    <label for="node-input-processingInterval"><i class="fa fa-hourglass"></i> Processing Int.</label>
+    <input type="number" id="node-input-processingInterval" style="width: 120px;" min="0" placeholder="3600000">
+    <span style="margin-left: 5px;">ms</span>
+  </div>
+
+  <div class="form-row action-history-row" style="display: none;">
+    <label for="node-input-returnBounds"><i class="fa fa-arrows-v"></i> Return Bounds</label>
+    <input type="checkbox" id="node-input-returnBounds" style="width: auto; margin-left: 5px;">
+    <span style="margin-left: 5px;">Include bounding values</span>
+  </div>
+
+  <!-- ── Acknowledge: Comment ────────────────────────────────────────── -->
+  <div class="form-row action-acknowledge-row" style="display: none;">
+    <label for="node-input-comment"><i class="fa fa-comment"></i> Comment</label>
+    <input type="text" id="node-input-comment" placeholder="Acknowledged from Node-RED">
+  </div>
+
+  <!-- ── Method: Object & Method IDs ─────────────────────────────────── -->
+  <div class="form-row action-method-row" style="display: none;">
+    <label for="node-input-objectId"><i class="fa fa-cube"></i> Object ID</label>
+    <input type="text" id="node-input-objectId" placeholder="ns=2;s=MyObject">
+  </div>
+  <div class="form-row action-method-row" style="display: none;">
+    <label for="node-input-methodId"><i class="fa fa-cog"></i> Method ID</label>
+    <input type="text" id="node-input-methodId" placeholder="ns=2;s=MyMethod">
+  </div>
+
+  <!-- Node name -->
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     3. HELP TEXT
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-help-name="opcua-action">
+  <p>Sets <code>msg.action</code> and action-specific configuration on the message
+  for a downstream OPC UA Client node.</p>
+
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt>any</dt>
+    <dd>Passes all existing message properties through unchanged. Any matching
+    property already on <code>msg</code> takes priority over the configured default
+    (except <code>msg.action</code> which is always overwritten).</dd>
+  </dl>
+
+  <h3>Outputs</h3>
+  <dl class="message-properties">
+    <dt>action <span class="property-type">string</span></dt>
+    <dd>The selected OPC UA action (e.g. <code>read</code>, <code>write</code>,
+    <code>subscribe</code>, etc.).</dd>
+  </dl>
+
+  <h3>Action-Specific Configuration</h3>
+
+  <h4>Subscribe / Monitor / Events</h4>
+  <dl class="message-properties">
+    <dt>interval <span class="property-type">number</span></dt>
+    <dd>Sampling interval in milliseconds. How often the server checks for changes.</dd>
+    <dt>queueSize <span class="property-type">number</span></dt>
+    <dd>Server-side queue size for monitored items (default: 10).</dd>
+  </dl>
+
+  <h4>Monitor (additional)</h4>
+  <dl class="message-properties">
+    <dt>deadbandType <span class="property-type">string</span></dt>
+    <dd><code>"a"</code> (absolute) or <code>"p"</code> (percent). Filters value changes
+    below the threshold.</dd>
+    <dt>deadbandValue <span class="property-type">number</span></dt>
+    <dd>Deadband threshold value.</dd>
+  </dl>
+
+  <h4>Events (additional)</h4>
+  <dl class="message-properties">
+    <dt>customEventFields <span class="property-type">string[]</span></dt>
+    <dd>Additional event fields to request beyond the standard set (comma-separated in config).</dd>
+  </dl>
+
+  <h4>Browse</h4>
+  <dl class="message-properties">
+    <dt>collect <span class="property-type">boolean</span></dt>
+    <dd>When <code>true</code>, the client collects all browse references into one message
+    instead of emitting one message per reference.</dd>
+  </dl>
+
+  <h4>History</h4>
+  <dl class="message-properties">
+    <dt>aggregate <span class="property-type">string</span></dt>
+    <dd>Aggregate function: <code>raw</code>, <code>min</code>, <code>max</code>,
+    <code>ave</code>, or <code>interpolative</code>.</dd>
+    <dt>numValuesPerNode <span class="property-type">number</span></dt>
+    <dd>Maximum number of historical values to return per node (default: 1000).</dd>
+    <dt>processingInterval <span class="property-type">number</span></dt>
+    <dd>Processing interval in ms for aggregate queries (not used for raw). Default: 3600000.</dd>
+    <dt>returnBounds <span class="property-type">boolean</span></dt>
+    <dd>Include bounding values in the result.</dd>
+  </dl>
+
+  <h4>Acknowledge</h4>
+  <dl class="message-properties">
+    <dt>comment <span class="property-type">string</span></dt>
+    <dd>Comment text sent with the acknowledgment (default: "Acknowledged from Node-RED").</dd>
+  </dl>
+
+  <h4>Method</h4>
+  <dl class="message-properties">
+    <dt>objectId <span class="property-type">string</span></dt>
+    <dd>NodeId of the object containing the method (e.g. <code>ns=2;s=MyObject</code>).</dd>
+    <dt>methodId <span class="property-type">string</span></dt>
+    <dd>NodeId of the method to call (e.g. <code>ns=2;s=MyMethod</code>).</dd>
+  </dl>
+
+  <h3>Details</h3>
+  <p>Place this node in the flow before an <b>OPC UA Client</b> node to configure
+  which operation the client should perform and how. Only the relevant configuration
+  fields for the selected action are shown in the editor.</p>
+
+  <p>Properties already present on the incoming <code>msg</code> are preserved
+  and take priority over the node's configured defaults (allowing dynamic override
+  from upstream nodes). The <code>msg.action</code> is always set to the node's
+  configured action.</p>
+
+  <h4>Example flow</h4>
+  <pre>inject → opcua-smart-item → opcua-action (subscribe, 1s) → opcua-client</pre>
+</script>
