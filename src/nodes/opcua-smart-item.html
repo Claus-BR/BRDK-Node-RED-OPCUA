@@ -461,36 +461,25 @@
         Click <b>Connect &amp; Browse</b> to load the tree, then click <i class="fa fa-plus"></i>
         next to any variable to add it.</li>
     <li><b>Multiple items</b> — Add as many variables as needed. They are sent to the
-        Client node in the correct format for <code>readmultiple</code> or
-        <code>subscribe</code> actions.</li>
+        Client node in the correct format for <code>read</code>,
+        <code>write</code>, or <code>subscribe</code> actions.</li>
     <li><b>Manual entry</b> — Type a NodeId directly if you know the address.</li>
   </ul>
 
   <h3>Outputs</h3>
-  <h4>Single item (1 item configured)</h4>
   <dl class="message-properties">
+    <dt>msg.items <span class="property-type">array</span></dt>
+    <dd>Array of <code>{ nodeId, datatype, browseName, value? }</code> objects.
+    Always an array, even for a single item.</dd>
     <dt>msg.topic <span class="property-type">string</span></dt>
-    <dd>The NodeId, e.g. <code>ns=2;s=MyVariable</code></dd>
-    <dt>msg.datatype <span class="property-type">string</span></dt>
-    <dd>The OPC UA data type name</dd>
-    <dt>msg.browseName <span class="property-type">string</span></dt>
-    <dd>Human-readable display name</dd>
-  </dl>
-
-  <h4>Multiple items (2+ items configured)</h4>
-  <dl class="message-properties">
-    <dt>msg.topic <span class="property-type">string</span></dt>
-    <dd>Set to <code>"multiple"</code></dd>
-    <dt>msg.payload <span class="property-type">array</span></dt>
-    <dd>Array of <code>{ nodeId, datatype, browseName }</code> objects</dd>
+    <dd>The first item's NodeId (for display / convenience).</dd>
   </dl>
 
   <h3>Usage</h3>
   <p>Place this node before an <b>OPC UA Client</b> node. For <code>read</code>
   or <code>subscribe</code> actions, the Smart Item provides the item metadata.
-  For <code>write</code>, set <code>msg.payload</code> to the value you want to write.</p>
-
-  <p>For multiple items, use with the <code>readmultiple</code> action on the Client node.</p>
+  For <code>write</code>, set <code>msg.payload</code> to the value you want to write
+  (for single-item nodes, the payload is coerced and placed into the item's <code>value</code>).</p>
 
   <h3>Endpoint</h3>
   <p>The endpoint is required for the treeview browser. It uses the same connection

@@ -4,7 +4,7 @@ A clean, modern Node-RED OPC UA library built on [node-opcua](https://github.com
 
 ## Features
 
-- **OPC UA Client** — Read, write, subscribe, browse, monitor, history, file transfer, method calls, and more (22 actions)
+- **OPC UA Client** — Read, write, subscribe, browse, monitor, history, file transfer, method calls, and more (20 actions)
 - **OPC UA Server** — Full-featured OPC UA server with dynamic address space, alarms, historian, file transfer, and method support
 - **OPC UA Browser** — One-shot address space exploration with enriched results
 - **OPC UA Method** — Dedicated method call node with argument configuration
@@ -46,21 +46,18 @@ Shared connection configuration:
 ### opcua-item
 
 Prepares OPC UA item metadata on `msg`:
-- `msg.topic` — NodeId (e.g. `ns=2;s=MyVariable`)
-- `msg.datatype` — OPC UA data type
-- `msg.payload` — value (coerced to correct type)
+- `msg.items` — always an array: `[{ nodeId, datatype, browseName, value? }]`
+- `msg.topic` — NodeId (for display)
 
 ### opcua-client
 
-Main client node with 22 actions:
+Main client node with 20 actions:
 
 | Action | Description |
 |--------|-------------|
-| `read` | Read a single node value |
-| `write` | Write a value to a node |
-| `readmultiple` | Read multiple nodes (msg.payload = array of nodeIds) |
-| `writemultiple` | Write multiple values |
-| `subscribe` | Create a monitored subscription |
+| `read` | Read one or more node values from `msg.items` |
+| `write` | Write values from `msg.items` (each item must have a `value`) |
+| `subscribe` | Create monitored subscriptions for items in `msg.items` |
 | `monitor` | Subscribe with deadband filtering |
 | `unsubscribe` | Remove a single monitored item |
 | `deletesubscription` | Delete the entire subscription |
@@ -152,6 +149,123 @@ Access level and permission configuration node. Builds `msg.accessLevel`, `msg.u
 
 ## Architecture
 
+### Message Data Structures
+
+All data actions (`read`, `write`, `subscribe`, `monitor`) use a unified `msg.items` array to describe which OPC UA nodes to operate on. This is the core contract between item nodes and the client node.
+
+#### `msg.items` — Item Array (Input to Client)
+
+Produced by `opcua-item` and `opcua-smart-item` nodes. Always an array, even for a single item.
+
+```json
+{
+  "items": [
+    {
+      "nodeId": "ns=2;s=Temperature",
+      "datatype": "Double",
+      "browseName": "Temperature",
+      "value": 42.5
+    }
+  ],
+  "topic": "ns=2;s=Temperature"
+}
+```
+
+| Property     | Type     | Required | Description |
+|-------------|----------|----------|-------------|
+| `nodeId`     | `string` | Yes      | OPC UA NodeId (e.g. `ns=2;s=MyVar`, `i=2258`) |
+| `datatype`   | `string` | Yes      | OPC UA data type name (e.g. `Double`, `String`, `Boolean`) |
+| `browseName` | `string` | No       | Human-readable display name |
+| `value`      | `any`    | Write only | The value to write. Omitted for read/subscribe operations. |
+| `timestamp`  | `Date`   | No       | Optional source timestamp for writes |
+
+`msg.topic` is set to the first item's `nodeId` for convenience and debug display. The client node does **not** read `msg.topic` for data actions — it exclusively uses `msg.items`.
+
+#### Per-Item Output (Client Output 1)
+
+After a `read`, `subscribe`, or `monitor` action, the client sends one message per item on output 1. The `items` array is **not** carried forward.
+
+```json
+{
+  "topic": "ns=2;s=Temperature",
+  "datatype": "Double",
+  "browseName": "Temperature",
+  "payload": 23.5,
+  "statusCode": { "value": 0, "description": "Good" },
+  "sourceTimestamp": "2026-02-27T10:00:00.000Z",
+  "serverTimestamp": "2026-02-27T10:00:01.000Z"
+}
+```
+
+| Property           | Type     | Description |
+|-------------------|----------|-------------|
+| `topic`            | `string` | NodeId of the item |
+| `datatype`         | `string` | OPC UA data type name |
+| `browseName`       | `string` | Display name |
+| `payload`          | `any`    | The read/changed value from the server |
+| `statusCode`       | `object` | OPC UA StatusCode for the operation |
+| `sourceTimestamp`   | `Date`   | When the source produced the value |
+| `serverTimestamp`   | `Date`   | When the server recorded the value |
+
+For **write** actions, output 1 carries `msg.payload` as an array of StatusCode(s) — one per written item.
+
+#### Batch Output (Client Output 3)
+
+For `read` actions, output 3 sends a single message with all results combined:
+
+```json
+{
+  "topic": "read",
+  "items": [
+    {
+      "nodeId": "ns=2;s=Temperature",
+      "datatype": "Double",
+      "browseName": "Temperature",
+      "value": 23.5,
+      "statusCode": { "value": 0 },
+      "sourceTimestamp": "2026-02-27T10:00:00.000Z",
+      "serverTimestamp": "2026-02-27T10:00:01.000Z"
+    },
+    {
+      "nodeId": "ns=2;s=Pressure",
+      "datatype": "Float",
+      "browseName": "Pressure",
+      "value": 1.013,
+      "statusCode": { "value": 0 },
+      "sourceTimestamp": "2026-02-27T10:00:00.000Z",
+      "serverTimestamp": "2026-02-27T10:00:01.000Z"
+    }
+  ],
+  "payload": [ /* raw DataValue array from node-opcua */ ]
+}
+```
+
+#### Status Output (Client Output 2)
+
+All actions emit status notifications on output 2:
+
+```json
+{
+  "payload": "reading",
+  "status": "reading",
+  "error": null,
+  "endpoint": "opc.tcp://localhost:4840"
+}
+```
+
+### Message Flow
+
+```
+┌──────────┐     msg.items = [{nodeId, datatype, ...}]     ┌─────────────┐
+│ opcua-   │ ──────────────────────────────────────────────► │ opcua-      │
+│ item     │     msg.topic = "ns=2;s=Temp"                  │ client      │
+│ (or      │                                                │             │──► Output 1: per-item results
+│ smart-   │                                                │ action:     │──► Output 2: status
+│ item)    │                                                │ read/write/ │──► Output 3: batch results
+└──────────┘                                                │ subscribe   │
+                                                            └─────────────┘
+```
+
 ```
 src/
 ├── lib/
@@ -162,7 +276,7 @@ src/
 └── nodes/
     ├── opcua-endpoint.js/.html       # Config node
     ├── opcua-item.js/.html           # Item metadata
-    ├── opcua-client.js/.html         # Main client (22 actions)
+    ├── opcua-client.js/.html         # Main client (20 actions)
     ├── opcua-browser.js/.html        # Address space browser
     ├── opcua-event.js/.html          # Event metadata
     ├── opcua-method.js/.html         # Method calls

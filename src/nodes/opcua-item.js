@@ -3,13 +3,13 @@
  * @description OPC UA Item node — prepares item metadata for downstream nodes.
  *
  * This node sits before the OPC UA Client node and enriches `msg` with:
- *   - `msg.topic`      — the OPC UA NodeId address
- *   - `msg.datatype`   — the OPC UA data type name
- *   - `msg.browseName` — human-readable display name
- *   - `msg.payload`    — the value (coerced to the correct type)
+ *   - `msg.items`  — always an array of one item: `[{ nodeId, datatype, browseName, value? }]`
+ *   - `msg.topic`  — the OPC UA NodeId address (for display / downstream compat)
  *
  * If the node has a static value configured AND `msg.payload` is empty,
- * the static value is used. Otherwise `msg.payload` flows through.
+ * the static value is used as the item value. Otherwise the incoming
+ * `msg.payload` is coerced and set as the item value.
+ * When no value is present (read-only use), `value` is omitted from the item.
  */
 
 "use strict";
@@ -35,26 +35,29 @@ module.exports = function (RED) {
 
     // ── Input handler ────────────────────────────────────────────────────
     this.on("input", (msg, send, done) => {
-      // Always set item metadata on the msg
-      msg.topic     = node.item;
-      msg.datatype  = node.datatype || msg.datatype || "";
-      msg.browseName = node.name;
+      const effectiveType = node.datatype || msg.datatype || "";
 
-      // Determine the effective data type
-      const effectiveType = msg.datatype;
+      // Build the item object
+      const item = {
+        nodeId:     node.item,
+        datatype:   effectiveType,
+        browseName: node.name,
+      };
 
       // Determine the raw value to coerce
       const hasPayload = msg.payload !== undefined && msg.payload !== null && msg.payload !== "";
       const hasStaticValue = node.value !== undefined && node.value !== null && node.value !== "";
 
       if (hasPayload) {
-        // Dynamic value from incoming msg
-        msg.payload = coerceValue(effectiveType, msg.payload);
+        item.value = coerceValue(effectiveType, msg.payload);
       } else if (hasStaticValue) {
-        // Static value from node configuration
-        msg.payload = coerceValue(effectiveType, node.value);
+        item.value = coerceValue(effectiveType, node.value);
       }
-      // If neither, msg.payload passes through as-is (for read operations)
+      // If neither, value is omitted (read-only operation)
+
+      // Always output items as an array
+      msg.items = [item];
+      msg.topic = node.item;
 
       send(msg);
       done();

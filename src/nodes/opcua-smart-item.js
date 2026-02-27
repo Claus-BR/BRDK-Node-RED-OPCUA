@@ -3,10 +3,8 @@
  * @description OPC UA Smart Item node — configurable item(s) with server-side
  * address space browsing from the editor.
  *
- * Supports two modes:
- *   1. **Single item** — sets `msg.topic`, `msg.datatype`, `msg.browseName`
- *   2. **Multiple items** — sets `msg.topic = "multiple"` and
- *      `msg.payload = [{ nodeId, datatype, browseName }, ...]`
+ * Always outputs `msg.items` as an array of `{ nodeId, datatype, browseName }`
+ * objects, regardless of how many items are configured (1 or N).
  *
  * The editor exposes HTTP admin endpoints so the treeview can browse
  * the OPC UA server's address space in real time.
@@ -61,26 +59,24 @@ module.exports = function (RED) {
         return;
       }
 
-      if (node.items.length === 1) {
-        // Single item mode: set msg properties directly
-        const item = node.items[0];
-        msg.topic      = item.nodeId;
-        msg.datatype   = item.datatype || msg.datatype || "";
-        msg.browseName = item.browseName || "";
-
-        // Coerce payload if present
-        if (msg.payload !== undefined && msg.payload !== null && msg.payload !== "") {
-          msg.payload = coerceValue(msg.datatype, msg.payload);
-        }
-      } else {
-        // Multiple items mode: set topic to "multiple" and payload to array
-        msg.topic = "multiple";
-        msg.payload = node.items.map((item) => ({
+      // Always output items as an array
+      msg.items = node.items.map((item) => {
+        const itemObj = {
           nodeId:     item.nodeId,
           datatype:   item.datatype || "",
           browseName: item.browseName || "",
-        }));
-      }
+        };
+
+        // For single-item write operations, coerce msg.payload into the item value
+        if (node.items.length === 1 && msg.payload !== undefined && msg.payload !== null && msg.payload !== "") {
+          itemObj.value = coerceValue(item.datatype || "", msg.payload);
+        }
+
+        return itemObj;
+      });
+
+      // Set topic to first item's nodeId for convenience / debug display
+      msg.topic = node.items[0].nodeId;
 
       send(msg);
       done();

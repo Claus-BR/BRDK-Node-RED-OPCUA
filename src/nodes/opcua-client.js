@@ -2,10 +2,10 @@
  * @file opcua-client.js
  * @description OPC UA Client node — the main workhorse of the library.
  *
- * Supports 22 actions via `msg.action` or node configuration:
+ * Supports 20 actions via `msg.action` or node configuration:
  *
  *   CONNECTION:   connect, disconnect, reconnect
- *   DATA:         read, write, readmultiple, writemultiple
+ *   DATA:         read, write
  *   SUBSCRIPTION: subscribe, monitor, unsubscribe, deletesubscription
  *   BROWSING:     browse, info
  *   METHODS:      method
@@ -13,6 +13,13 @@
  *   HISTORY:      history
  *   FILE:         readfile, writefile
  *   ADVANCED:     register, unregister, build (ExtensionObject)
+ *
+ * ─── Message format ────────────────────────────────────────────────────────────
+ *
+ *   Data actions (read, write, subscribe, monitor) expect `msg.items` — an
+ *   array of `{ nodeId, datatype, browseName, value? }` objects produced by
+ *   the opcua-item or opcua-smart-item nodes.  Single-item and multi-item
+ *   operations use the same code path.
  *
  * ─── Architecture ──────────────────────────────────────────────────────────────
  *
@@ -29,9 +36,9 @@
  *
  * ─── Outputs ───────────────────────────────────────────────────────────────────
  *
- *   Output 1 — Data results (read values, write status, browse refs, events…)
+ *   Output 1 — Data results (per-item messages for read; write status)
  *   Output 2 — Status & error notifications { error, endpoint, status }
- *   Output 3 — Batch results (all items from readmultiple in a single msg)
+ *   Output 3 — Batch results (all items from read in a single msg)
  */
 
 "use strict";
@@ -90,9 +97,7 @@ module.exports = function (RED) {
     this.client       = null;          // OPCUAClient instance
     this.session      = null;          // ClientSession instance
     this.subscription = null;          // ClientSubscription instance
-    this.monitoredItems = new Map();   // topic → ClientMonitoredItem
-    this.multipleItems  = [];          // Accumulated items for readmultiple
-    this.writeMultipleItems = [];      // Accumulated items for writemultiple
+    this.monitoredItems = new Map();   // nodeId → ClientMonitoredItem
     this.cmdQueue       = [];          // Messages queued while connecting
     this.currentStatus  = "";
     this.hasConnected   = false;
@@ -290,8 +295,6 @@ module.exports = function (RED) {
         events:              () => actionEvents(msg, send, done),
         info:                () => actionInfo(msg, send, done),
         build:               () => actionBuild(msg, send, done),
-        readmultiple:        () => actionReadMultiple(msg, send, done),
-        writemultiple:       () => actionWriteMultiple(msg, send, done),
         register:            () => actionRegister(msg, send, done),
         unregister:          () => actionUnregister(msg, send, done),
         acknowledge:         () => actionAcknowledge(msg, send, done),
@@ -318,174 +321,64 @@ module.exports = function (RED) {
     // ═══════════════════════════════════════════════════════════════════
 
     /**
-     * READ — Read a single node value.
+     * READ — Read one or more node values from `msg.items`.
+     *
+     * Sends a per-item message on output 1 for each item read,
+     * and a single batch message on output 3 with all results.
      */
     async function actionRead(msg, send, done) {
       if (!assertSession(msg, done)) return;
 
       try {
+        const items = msg.items;
+        if (!items?.length) {
+          node.warn("No items to read — msg.items is empty or missing");
+          done();
+          return;
+        }
+
         setStatus("reading");
 
-        const nodeId = resolveNodeId(msg);
-        const readOptions = {
-          nodeId,
-          attributeId: opcua.AttributeIds.Value,
-        };
-
-        // Support index range for array reads
-        if (msg.payload?.range) {
-          readOptions.indexRange = new opcua.NumericRange(msg.payload.range);
-        }
-
-        const dataValue = await node.session.read(readOptions);
-
-        msg.payload = dataValue.value?.value;
-        msg.datatype = dataValue.value?.dataType ? opcua.DataType[dataValue.value.dataType] : "";
-        msg.statusCode = dataValue.statusCode;
-        msg.serverTimestamp = dataValue.serverTimestamp;
-        msg.sourceTimestamp = dataValue.sourceTimestamp;
-
-        send([msg, null, null]);
-        done();
-      } catch (err) {
-        handleActionError("read error", err, msg, done);
-      }
-    }
-
-    /**
-     * WRITE — Write a single node value.
-     */
-    async function actionWrite(msg, send, done) {
-      if (!assertSession(msg, done)) return;
-
-      try {
-        setStatus("writing");
-
-        const nodeId = resolveNodeId(msg);
-        const datatype = resolveDataType(msg);
-
-        const writeValue = {
-          nodeId,
-          attributeId: opcua.AttributeIds.Value,
-          value: converter.buildDataValue(
-            datatype,
-            msg.payload,
-            msg.sourceTimestamp || msg.timestamp,
-            msg.statusCode
-          ),
-        };
-
-        // Support index range for array writes
-        if (msg.range) {
-          writeValue.indexRange = new opcua.NumericRange(msg.range);
-        }
-
-        const statusCode = await node.session.write(writeValue);
-
-        msg.payload = statusCode;
-        setStatus("value written");
-        send([msg, null, null]);
-        done();
-      } catch (err) {
-        handleActionError("write error", err, msg, done);
-      }
-    }
-
-    // ═══════════════════════════════════════════════════════════════════
-    //  ACTION HANDLERS — Read/Write Multiple
-    // ═══════════════════════════════════════════════════════════════════
-
-    /**
-     * READ MULTIPLE — Read multiple nodes in a single call.
-     *
-     * Two modes:
-     * 1. Accumulation: individual msgs store nodeIds, then "readmultiple" trigger reads all.
-     * 2. Direct: msg.payload is an array of nodeIds to read immediately.
-     */
-    async function actionReadMultiple(msg, send, done) {
-      if (!assertSession(msg, done)) return;
-
-      try {
-        // Clear accumulated items
-        if (msg.topic === "clearitems") {
-          node.multipleItems = [];
-          setStatus("items cleared");
-          done();
-          return;
-        }
-
-        // Direct array mode: payload is an array of nodeId objects
-        if (msg.topic === "readmultiple" && Array.isArray(msg.payload)) {
-          node.multipleItems = msg.payload.map((item) => ({
-            nodeId: typeof item === "string" ? item : item.nodeId,
-            datatype: item.datatype || "",
-            browseName: item.browseName || "",
-          }));
-        } else if (msg.topic !== "readmultiple") {
-          // Accumulation mode: store this item
-          node.multipleItems.push({
-            nodeId: msg.topic,
-            datatype: msg.datatype || "",
-            browseName: msg.browseName || "",
-          });
-          setStatus("item stored");
-          done();
-          return;
-        }
-
-        // Trigger: read all accumulated items
-        if (node.multipleItems.length === 0) {
-          setStatus("no items");
-          done();
-          return;
-        }
-
-        setStatus("reading multiple");
-
-        const nodesToRead = node.multipleItems.map((item) => ({
+        const nodesToRead = items.map((item) => ({
           nodeId: item.nodeId,
           attributeId: opcua.AttributeIds.Value,
         }));
 
         const dataValues = await node.session.read(nodesToRead);
 
-        // Check if ALL mode (send all values in one message)
-        if (msg.payload === "ALL") {
-          const allValues = node.multipleItems.map((item, i) => ({
+        // Send a per-item message on output 1 (strip items from output)
+        const { items: _items, ...baseMsgRead } = msg;
+        for (let i = 0; i < dataValues.length; i++) {
+          const itemMsg = {
+            ...baseMsgRead,
+            topic: items[i].nodeId,
+            datatype: items[i].datatype,
+            browseName: items[i].browseName,
+            payload: dataValues[i].value?.value,
+            statusCode: dataValues[i].statusCode,
+            sourceTimestamp: dataValues[i].sourceTimestamp,
+            serverTimestamp: dataValues[i].serverTimestamp,
+          };
+          send([itemMsg, null, null]);
+        }
+
+        // Send a batch message on output 3
+        const batchMsg = {
+          topic: "read",
+          items: items.map((item, i) => ({
             nodeId: item.nodeId,
             datatype: item.datatype,
             browseName: item.browseName,
             value: dataValues[i].value?.value,
             statusCode: dataValues[i].statusCode,
             sourceTimestamp: dataValues[i].sourceTimestamp,
-          }));
-          const batchMsg = { ...msg, topic: "readmultiple", payload: allValues };
-          send([batchMsg, null, null]);
-        } else {
-          // Send individual messages for each read value
-          for (let i = 0; i < dataValues.length; i++) {
-            const itemMsg = {
-              ...msg,
-              topic: node.multipleItems[i].nodeId,
-              datatype: node.multipleItems[i].datatype,
-              browseName: node.multipleItems[i].browseName,
-              payload: dataValues[i].value?.value,
-              statusCode: dataValues[i].statusCode,
-              sourceTimestamp: dataValues[i].sourceTimestamp,
-              serverTimestamp: dataValues[i].serverTimestamp,
-            };
-            send([itemMsg, null, null]);
-          }
-        }
-
-        // Also send raw batch on output 3
-        const batchMsg = {
-          topic: "readmultiple",
-          items: node.multipleItems,
+            serverTimestamp: dataValues[i].serverTimestamp,
+          })),
           payload: dataValues,
         };
         send([null, null, batchMsg]);
 
+        setStatus("read done");
         done();
       } catch (err) {
         handleActionError("read error", err, msg, done);
@@ -493,60 +386,40 @@ module.exports = function (RED) {
     }
 
     /**
-     * WRITE MULTIPLE — Write multiple nodes in a single call.
+     * WRITE — Write one or more node values from `msg.items`.
      *
-     * Two modes:
-     * 1. Accumulation: individual msgs store write items, then "writemultiple" trigger writes all.
-     * 2. Direct: msg.payload is an array of {nodeId, datatype, value}.
+     * Each item in `msg.items` must have a `value` property.
      */
-    async function actionWriteMultiple(msg, send, done) {
+    async function actionWrite(msg, send, done) {
       if (!assertSession(msg, done)) return;
 
       try {
-        // Clear accumulated items
-        if (msg.topic === "clearitems") {
-          node.writeMultipleItems = [];
-          setStatus("items cleared");
-          done();
-          return;
-        }
-
-        // Direct array mode
-        if (msg.topic === "writemultiple" && Array.isArray(msg.payload)) {
-          node.writeMultipleItems = msg.payload;
-        } else if (msg.topic !== "writemultiple") {
-          // Accumulation mode
-          node.writeMultipleItems.push({
-            nodeId: msg.topic,
-            datatype: msg.datatype || "",
-            value: msg.payload,
-            timestamp: msg.timestamp || msg.sourceTimestamp,
-          });
-          setStatus("item stored");
-          done();
-          return;
-        }
-
-        // Trigger: write all accumulated items
-        if (node.writeMultipleItems.length === 0) {
-          setStatus("no items");
+        const items = msg.items;
+        if (!items?.length) {
+          node.warn("No items to write — msg.items is empty or missing");
           done();
           return;
         }
 
         setStatus("writing");
 
-        const writeValues = node.writeMultipleItems.map((item) => ({
+        const writeValues = items.map((item) => ({
           nodeId: item.nodeId,
           attributeId: opcua.AttributeIds.Value,
-          value: converter.buildDataValue(item.datatype, item.value, item.timestamp),
+          value: converter.buildDataValue(
+            item.datatype,
+            item.value,
+            item.timestamp || msg.sourceTimestamp || msg.timestamp
+          ),
         }));
 
         const statusCodes = await node.session.write(writeValues);
 
-        msg.payload = statusCodes;
-        setStatus("values written");
-        send([msg, null, null]);
+        // Strip items from output
+        const { items: _items, ...baseMsgWrite } = msg;
+        const writeResult = { ...baseMsgWrite, payload: statusCodes };
+        setStatus("value written");
+        send([writeResult, null, null]);
         done();
       } catch (err) {
         handleActionError("write error", err, msg, done);
@@ -558,53 +431,65 @@ module.exports = function (RED) {
     // ═══════════════════════════════════════════════════════════════════
 
     /**
-     * SUBSCRIBE — Subscribe to value changes on a node.
+     * SUBSCRIBE — Subscribe to value changes on one or more nodes.
+     *
+     * Uses `msg.items` to determine which nodes to subscribe to.
+     * For a single item, creates an individual ClientMonitoredItem.
+     * For multiple items, creates a ClientMonitoredItemGroup.
      */
     async function actionSubscribe(msg, send, done) {
       if (!assertSession(msg, done)) return;
 
       try {
-        await ensureSubscription(msg);
-
-        // Multiple items mode: payload is array of {nodeId, datatype}
-        if (msg.topic === "multiple" && Array.isArray(msg.payload)) {
-          await subscribeMultipleItems(msg, send);
+        const items = msg.items;
+        if (!items?.length) {
+          node.warn("No items to subscribe — msg.items is empty or missing");
           done();
           return;
         }
 
+        await ensureSubscription(msg);
         setStatus("subscribing");
 
-        const nodeId = resolveNodeId(msg);
         const samplingInterval = msg.interval || converter.toMilliseconds(node.time, node.timeUnit);
         const queueSize = msg.queueSize || 10;
 
-        const monitoredItem = opcua.ClientMonitoredItem.create(
-          node.subscription,
-          { nodeId, attributeId: opcua.AttributeIds.Value },
-          { samplingInterval, discardOldest: true, queueSize },
-          opcua.TimestampsToReturn.Both
-        );
+        if (items.length === 1) {
+          // Single item — individual monitored item
+          const item = items[0];
+          const monitoredItem = opcua.ClientMonitoredItem.create(
+            node.subscription,
+            { nodeId: item.nodeId, attributeId: opcua.AttributeIds.Value },
+            { samplingInterval, discardOldest: true, queueSize },
+            opcua.TimestampsToReturn.Both
+          );
 
-        monitoredItem.on("changed", (dataValue) => {
-          const outMsg = {
-            topic: msg.topic,
-            payload: dataValue.value?.value,
-            statusCode: dataValue.statusCode,
-            serverTimestamp: dataValue.serverTimestamp,
-            sourceTimestamp: dataValue.sourceTimestamp,
-            serverPicoseconds: dataValue.serverPicoseconds,
-            sourcePicoseconds: dataValue.sourcePicoseconds,
-          };
-          setStatus("value changed");
-          node.send([outMsg, null, null]);
-        });
+          monitoredItem.on("changed", (dataValue) => {
+            const outMsg = {
+              topic: item.nodeId,
+              datatype: item.datatype,
+              browseName: item.browseName,
+              payload: dataValue.value?.value,
+              statusCode: dataValue.statusCode,
+              serverTimestamp: dataValue.serverTimestamp,
+              sourceTimestamp: dataValue.sourceTimestamp,
+              serverPicoseconds: dataValue.serverPicoseconds,
+              sourcePicoseconds: dataValue.sourcePicoseconds,
+            };
+            setStatus("value changed");
+            node.send([outMsg, null, null]);
+          });
 
-        monitoredItem.on("err", (errStr) => {
-          node.error(`Monitored item error: ${errStr}`, msg);
-        });
+          monitoredItem.on("err", (errStr) => {
+            node.error(`Monitored item error: ${errStr}`, msg);
+          });
 
-        node.monitoredItems.set(msg.topic, monitoredItem);
+          node.monitoredItems.set(item.nodeId, monitoredItem);
+        } else {
+          // Multiple items — monitored item group
+          await subscribeMultipleItems(items, msg, send);
+        }
+
         setStatus("subscribed");
         done();
       } catch (err) {
@@ -613,16 +498,24 @@ module.exports = function (RED) {
     }
 
     /**
-     * MONITOR — Subscribe with deadband filtering.
+     * MONITOR — Subscribe with deadband filtering on one or more nodes.
+     *
+     * Uses `msg.items` to determine which nodes to monitor.
      */
     async function actionMonitor(msg, send, done) {
       if (!assertSession(msg, done)) return;
 
       try {
+        const items = msg.items;
+        if (!items?.length) {
+          node.warn("No items to monitor — msg.items is empty or missing");
+          done();
+          return;
+        }
+
         await ensureSubscription(msg);
         setStatus("monitoring");
 
-        const nodeId = resolveNodeId(msg);
         const samplingInterval = msg.interval || converter.toMilliseconds(node.time, node.timeUnit);
         const queueSize = msg.queueSize || 10;
 
@@ -633,39 +526,44 @@ module.exports = function (RED) {
           ? opcua.DeadbandType.Percent
           : opcua.DeadbandType.Absolute;
 
-        const monitoredItem = opcua.ClientMonitoredItem.create(
-          node.subscription,
-          { nodeId, attributeId: opcua.AttributeIds.Value },
-          {
-            samplingInterval,
-            discardOldest: true,
-            queueSize,
-            filter: new opcua.DataChangeFilter({
-              trigger: opcua.DataChangeTrigger.StatusValue,
-              deadbandType,
-              deadbandValue: dbValue,
-            }),
-          },
-          opcua.TimestampsToReturn.Both
-        );
+        for (const item of items) {
+          const monitoredItem = opcua.ClientMonitoredItem.create(
+            node.subscription,
+            { nodeId: item.nodeId, attributeId: opcua.AttributeIds.Value },
+            {
+              samplingInterval,
+              discardOldest: true,
+              queueSize,
+              filter: new opcua.DataChangeFilter({
+                trigger: opcua.DataChangeTrigger.StatusValue,
+                deadbandType,
+                deadbandValue: dbValue,
+              }),
+            },
+            opcua.TimestampsToReturn.Both
+          );
 
-        monitoredItem.on("changed", (dataValue) => {
-          const outMsg = {
-            topic: msg.topic,
-            payload: dataValue.value?.value,
-            statusCode: dataValue.statusCode,
-            serverTimestamp: dataValue.serverTimestamp,
-            sourceTimestamp: dataValue.sourceTimestamp,
-          };
-          setStatus("value changed");
-          node.send([outMsg, null, null]);
-        });
+          monitoredItem.on("changed", (dataValue) => {
+            const outMsg = {
+              topic: item.nodeId,
+              datatype: item.datatype,
+              browseName: item.browseName,
+              payload: dataValue.value?.value,
+              statusCode: dataValue.statusCode,
+              serverTimestamp: dataValue.serverTimestamp,
+              sourceTimestamp: dataValue.sourceTimestamp,
+            };
+            setStatus("value changed");
+            node.send([outMsg, null, null]);
+          });
 
-        monitoredItem.on("err", (errStr) => {
-          node.error(`Monitored item error: ${errStr}`, msg);
-        });
+          monitoredItem.on("err", (errStr) => {
+            node.error(`Monitored item error: ${errStr}`, msg);
+          });
 
-        node.monitoredItems.set(msg.topic, monitoredItem);
+          node.monitoredItems.set(item.nodeId, monitoredItem);
+        }
+
         setStatus("monitoring");
         done();
       } catch (err) {
@@ -674,21 +572,26 @@ module.exports = function (RED) {
     }
 
     /**
-     * UNSUBSCRIBE — Terminate monitoring for a specific node.
+     * UNSUBSCRIBE — Terminate monitoring for items in `msg.items`.
      */
     async function actionUnsubscribe(msg, send, done) {
-      const monitoredItem = node.monitoredItems.get(msg.topic);
-      if (monitoredItem) {
-        try {
-          await monitoredItem.terminate();
-          node.monitoredItems.delete(msg.topic);
-          msg.payload = `Unsubscribed from ${msg.topic}`;
-          setStatus("subscribed");
-          send([msg, null, null]);
-        } catch (err) {
-          node.warn(`Unsubscribe error: ${err.message}`);
+      const items = msg.items || [];
+
+      for (const item of items) {
+        const monitoredItem = node.monitoredItems.get(item.nodeId);
+        if (monitoredItem) {
+          try {
+            await monitoredItem.terminate();
+            node.monitoredItems.delete(item.nodeId);
+          } catch (err) {
+            node.warn(`Unsubscribe error for ${item.nodeId}: ${err.message}`);
+          }
         }
       }
+
+      msg.payload = `Unsubscribed from ${items.length} item(s)`;
+      setStatus("subscribed");
+      send([msg, null, null]);
       done();
     }
 
@@ -1221,9 +1124,12 @@ module.exports = function (RED) {
 
     /**
      * Subscribe to multiple items in a group.
+     *
+     * @param {Array} items - Array of { nodeId, datatype, browseName }.
+     * @param {object} msg  - The original incoming message.
+     * @param {Function} send - The send function.
      */
-    async function subscribeMultipleItems(msg, send) {
-      const items = msg.payload; // Array of {nodeId, datatype}
+    async function subscribeMultipleItems(items, msg, send) {
       const samplingInterval = msg.interval || converter.toMilliseconds(node.time, node.timeUnit);
 
       const itemsToMonitor = items.map((item) => ({
@@ -1363,21 +1269,6 @@ module.exports = function (RED) {
       }
 
       return topic;
-    }
-
-    /**
-     * Resolve the data type from the message.
-     *
-     * Checks (in order): msg.datatype, datatype embedded in msg.topic.
-     */
-    function resolveDataType(msg) {
-      if (msg.datatype) return msg.datatype;
-
-      // Check for datatype in topic
-      const topicMatch = (msg.topic || "").match(/datatype=(\S+)/);
-      if (topicMatch) return topicMatch[1];
-
-      return "";
     }
 
     // ─── Status helpers ──────────────────────────────────────────────

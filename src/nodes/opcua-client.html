@@ -2,12 +2,12 @@
   @file opcua-client.html
   @description Editor definition for the OPC UA Client node.
 
-  The main workhorse: supports 22 actions for interacting with OPC UA servers.
+  The main workhorse: supports 20 actions for interacting with OPC UA servers.
 
   Outputs:
     [0] Data results
     [1] Status & error notifications
-    [2] Batch results (readmultiple)
+    [2] Batch results (read)
 -->
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
@@ -90,8 +90,6 @@
       <optgroup label="Data Access">
         <option value="read">Read</option>
         <option value="write">Write</option>
-        <option value="readmultiple">Read Multiple</option>
-        <option value="writemultiple">Write Multiple</option>
       </optgroup>
       <optgroup label="Subscriptions">
         <option value="subscribe">Subscribe</option>
@@ -226,8 +224,8 @@
     <dd>Override the node's configured action at runtime. One of:
     <code>read</code>, <code>write</code>, <code>subscribe</code>, <code>monitor</code>,
     <code>unsubscribe</code>, <code>deletesubscription</code>, <code>browse</code>,
-    <code>events</code>, <code>info</code>, <code>build</code>, <code>readmultiple</code>,
-    <code>writemultiple</code>, <code>register</code>, <code>unregister</code>,
+    <code>events</code>, <code>info</code>, <code>build</code>,
+    <code>register</code>, <code>unregister</code>,
     <code>acknowledge</code>, <code>history</code>, <code>readfile</code>,
     <code>writefile</code>, <code>connect</code>, <code>disconnect</code>,
     <code>reconnect</code>, <code>method</code>.</dd>
@@ -269,7 +267,7 @@
     <li>Batch
       <dl class="message-properties">
         <dt>payload <span class="property-type">array</span></dt>
-        <dd>All values from a readmultiple operation.</dd>
+        <dd>All values from a read operation.</dd>
         <dt>items <span class="property-type">array</span></dt>
         <dd>The items that were read.</dd>
       </dl>
@@ -283,17 +281,15 @@
 
   <h4>Data Access</h4>
   <ul>
-    <li><b>Read</b> — reads the value of the node specified in <code>msg.topic</code>.</li>
-    <li><b>Write</b> — writes <code>msg.payload</code> to the node. Requires <code>msg.datatype</code>.</li>
-    <li><b>Read Multiple</b> — accumulates nodeIds, then batch-reads when triggered with <code>msg.topic = "readmultiple"</code>.</li>
-    <li><b>Write Multiple</b> — similar accumulation pattern for batch writes.</li>
+    <li><b>Read</b> — reads the values of nodes specified in <code>msg.items</code>. Sends per-item results on output 1 and batch results on output 3.</li>
+    <li><b>Write</b> — writes values from <code>msg.items</code> (each item must have a <code>value</code> property). Requires <code>datatype</code> on each item.</li>
   </ul>
 
   <h4>Subscriptions</h4>
   <ul>
-    <li><b>Subscribe</b> — monitors value changes. Set <code>msg.topic = "multiple"</code> with an array payload for group subscriptions.</li>
+    <li><b>Subscribe</b> — monitors value changes for all items in <code>msg.items</code>. Single items use individual monitoring; multiple items use a group subscription.</li>
     <li><b>Monitor</b> — like subscribe but with deadband filtering.</li>
-    <li><b>Unsubscribe</b> — stops monitoring a specific node.</li>
+    <li><b>Unsubscribe</b> — stops monitoring items in <code>msg.items</code>.</li>
     <li><b>Delete Subscription</b> — removes the entire subscription.</li>
   </ul>
 
