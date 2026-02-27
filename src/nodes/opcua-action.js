@@ -7,7 +7,7 @@
  *   - subscribe/monitor/events: `msg.interval`, `msg.queueSize`
  *   - monitor:                  `msg.deadbandType`, `msg.deadbandValue`
  *   - events:                   `msg.customEventFields`
- *   - browse:                   `msg.collect`
+ *   - browse:                   `msg.collect`, `msg.maxDepth`
  *   - history:                  `msg.aggregate`, `msg.numValuesPerNode`,
  *                               `msg.processingInterval`, `msg.returnBounds`
  *   - acknowledge:              `msg.comment`
@@ -41,7 +41,8 @@ module.exports = function (RED) {
     this.customEventFields = config.customEventFields || "";
 
     // ── Browse ──────────────────────────────────────────────────────────
-    this.collect = config.collect === true;
+    this.collect  = config.collect === true;
+    this.maxDepth = Number(config.maxDepth) || 1;
 
     // ── History ─────────────────────────────────────────────────────────
     this.aggregate          = config.aggregate || "raw";
@@ -77,7 +78,8 @@ module.exports = function (RED) {
           break;
 
         case "browse":
-          msg.collect = node.collect;
+          msg.collect  = node.collect;
+          msg.maxDepth = msg.maxDepth || node.maxDepth;
           break;
 
         case "history":

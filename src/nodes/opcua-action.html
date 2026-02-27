@@ -26,6 +26,7 @@
       customEventFields:   { value: "" },
       // Browse
       collect:             { value: false },
+      maxDepth:            { value: 1 },
       // History
       aggregate:           { value: "raw" },
       numValuesPerNode:    { value: 1000 },
@@ -53,7 +54,7 @@
       var defaults = {
         time: 10, timeUnit: "s", queueSize: 10,
         deadbandtype: "a", deadbandvalue: 1,
-        customEventFields: "", collect: false,
+        customEventFields: "", collect: false, maxDepth: 1,
         aggregate: "raw", numValuesPerNode: 1000,
         processingInterval: 3600000, returnBounds: false,
         comment: "Acknowledged from Node-RED",
@@ -200,7 +201,12 @@
     <input type="checkbox" id="node-input-collect" style="width: auto; margin-left: 5px;">
     <span style="margin-left: 5px;">Collect all references into a single message</span>
   </div>
-
+  <!-- ── Browse: Max Depth ────────────────────────────────────────── -->
+  <div class="form-row action-browse-row" style="display: none;">
+    <label for="node-input-maxDepth"><i class="fa fa-level-down"></i> Max Depth</label>
+    <input type="number" id="node-input-maxDepth" style="width: 80px;" min="1" placeholder="1">
+    <span style="margin-left: 5px;">levels deep (1 = direct children only)</span>
+  </div>
   <!-- ── History: Aggregate ──────────────────────────────────────────── -->
   <div class="form-row action-history-aggregate-row" style="display: none;">
     <label for="node-input-aggregate"><i class="fa fa-bar-chart"></i> Aggregate</label>

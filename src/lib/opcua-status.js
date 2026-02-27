@@ -37,6 +37,7 @@ const STATUS_MAP = {
 
   // ── Active operations ────────────────────────────────────────────────────
   "reading":            { fill: "green",  shape: "dot",  text: "reading" },
+  "read done":          { fill: "green",  shape: "dot",  text: "read done" },
   "writing":            { fill: "green",  shape: "dot",  text: "writing" },
   "subscribing":        { fill: "green",  shape: "dot",  text: "subscribing" },
   "subscribed":         { fill: "green",  shape: "dot",  text: "subscribed" },
@@ -48,9 +49,6 @@ const STATUS_MAP = {
   "values written":     { fill: "green",  shape: "dot",  text: "values written" },
   "calling method":     { fill: "green",  shape: "dot",  text: "calling method" },
   "method executed":    { fill: "green",  shape: "dot",  text: "method executed" },
-  "reading multiple":   { fill: "green",  shape: "dot",  text: "reading multiple" },
-  "item stored":        { fill: "green",  shape: "ring", text: "item stored" },
-  "items cleared":      { fill: "green",  shape: "ring", text: "items cleared" },
   "event received":     { fill: "green",  shape: "dot",  text: "event received" },
   "acknowledging":      { fill: "green",  shape: "dot",  text: "acknowledging" },
 
@@ -67,6 +65,7 @@ const STATUS_MAP = {
   "no items":           { fill: "red",    shape: "ring", text: "no items to process" },
   "write error":        { fill: "red",    shape: "ring", text: "write error" },
   "read error":         { fill: "red",    shape: "ring", text: "read error" },
+  "browse error":       { fill: "red",    shape: "ring", text: "browse error" },
   "method error":       { fill: "red",    shape: "ring", text: "method error" },
 
   // ── Idle / default ───────────────────────────────────────────────────────

@@ -44,7 +44,6 @@
 "use strict";
 
 const opcua = require("node-opcua");
-const { NodeCrawler } = require("node-opcua-client-crawler");
 const { ClientFile } = require("node-opcua-file-transfer");
 const { readFileSync } = require("fs");
 
@@ -615,7 +614,15 @@ module.exports = function (RED) {
     // ═══════════════════════════════════════════════════════════════════
 
     /**
-     * BROWSE — Browse the address space using NodeCrawler.
+     * BROWSE — Browse the address space with configurable depth.
+     *
+     * Uses session.browse() in a recursive loop controlled by msg.maxDepth.
+     * Each reference is enriched with Value + DataType for Variable nodes.
+     *
+     * msg.maxDepth = 1 (default) → direct children only
+     * msg.maxDepth = N           → recurse N levels deep
+     * msg.collect  = true        → nested tree structure in msg.payload (output 1)
+     * msg.collect  = false       → one flat message per reference (output 1)
      */
     async function actionBrowse(msg, send, done) {
       if (!assertSession(msg, done)) return;
@@ -623,37 +630,130 @@ module.exports = function (RED) {
       try {
         setStatus("browsing");
 
-        const nodeId = resolveNodeId(msg) || "RootFolder";
-        const crawler = new NodeCrawler(node.session);
-        const elements = [];
+        const startNodeId = resolveNodeId(msg) || "ns=0;i=85";
+        const maxDepth = Number(msg.maxDepth) || 1;
 
-        crawler.on("browsed", (element) => {
-          elements.push(element);
+        const tree = await browseLevel(startNodeId, 1, maxDepth);
 
-          // Send individual elements unless collect mode
-          if (!msg.collect) {
-            const elementMsg = {
-              topic: msg.topic,
-              payload: element,
-            };
-            node.send([elementMsg, null, null]);
-          }
-        });
-
-        await crawler.read(opcua.resolveNodeId(nodeId));
-        crawler.dispose();
-
-        // In collect mode, send all elements as one message
-        if (msg.collect) {
-          msg.payload = elements;
+        if (tree.length === 0) {
+          msg.payload = [];
           send([msg, null, null]);
+          setStatusWithDetail("browse done", "0 items");
+          done();
+          return;
         }
 
-        setStatus("browse done");
+        if (msg.collect) {
+          // Collect mode: nested tree structure
+          msg.payload = tree;
+          send([msg, null, null]);
+        } else {
+          // Stream mode: flatten tree and send one message per entry
+          const flat = flattenTree(tree);
+          for (const entry of flat) {
+            send([{ topic: msg.topic, payload: entry }, null, null]);
+          }
+        }
+
+        const count = countTreeNodes(tree);
+        setStatusWithDetail("browse done", `${count} items`);
         done();
       } catch (err) {
-        handleActionError("error", err, msg, done);
+        handleActionError("browse error", err, msg, done);
       }
+    }
+
+    /**
+     * Recursively browse one level and return an array of enriched entries.
+     * Each non-variable entry gets a `children` array populated by recursion.
+     *
+     * @param {string} nodeId   - NodeId to browse
+     * @param {number} depth    - Current depth (1-based)
+     * @param {number} maxDepth - Maximum depth to recurse
+     * @returns {Promise<object[]>} Array of enriched browse entries
+     */
+    async function browseLevel(nodeId, depth, maxDepth) {
+      const browseResult = await node.session.browse({
+        nodeId,
+        browseDirection: opcua.BrowseDirection.Forward,
+        referenceTypeId: "HierarchicalReferences",
+        includeSubtypes: true,
+        resultMask: 0x3F,
+      });
+
+      const references = browseResult.references || [];
+      const entries = [];
+
+      for (const ref of references) {
+        const entry = {
+          browseName:     ref.browseName?.name || ref.browseName?.toString() || "",
+          nodeId:         ref.nodeId.toString(),
+          displayName:    ref.displayName?.text || "",
+          nodeClass:      opcua.NodeClass[ref.nodeClass] || String(ref.nodeClass),
+          typeDefinition: ref.typeDefinition?.toString() || "",
+          isVariable:     ref.nodeClass === opcua.NodeClass.Variable,
+          value:          null,
+          dataType:       "",
+          depth,
+          children:       [],
+        };
+
+        // Read Value + DataType for Variable nodes
+        if (ref.nodeClass === opcua.NodeClass.Variable) {
+          try {
+            const dataValues = await node.session.read([
+              { nodeId: ref.nodeId, attributeId: opcua.AttributeIds.Value },
+              { nodeId: ref.nodeId, attributeId: opcua.AttributeIds.DataType },
+            ]);
+            entry.value = dataValues[0]?.value?.value ?? null;
+            if (dataValues[1]?.value?.value) {
+              const dtNodeId = dataValues[1].value.value;
+              entry.dataType = opcua.DataType[dtNodeId.value] || dtNodeId.toString();
+            }
+          } catch {
+            // Some nodes may not support reading — keep null/empty
+          }
+        }
+
+        // Recurse into non-variable nodes (objects/folders) if under max depth
+        if (depth < maxDepth && ref.nodeClass !== opcua.NodeClass.Variable) {
+          entry.children = await browseLevel(ref.nodeId.toString(), depth + 1, maxDepth);
+        }
+
+        entries.push(entry);
+      }
+
+      return entries;
+    }
+
+    /**
+     * Flatten a browse tree into a flat array (for stream mode).
+     * Removes the `children` property from each entry.
+     */
+    function flattenTree(tree) {
+      const flat = [];
+      for (const entry of tree) {
+        const { children, ...rest } = entry;
+        flat.push(rest);
+        if (children && children.length > 0) {
+          flat.push(...flattenTree(children));
+        }
+      }
+      return flat;
+    }
+
+    /**
+     * Count total nodes in a browse tree.
+     */
+    function countTreeNodes(tree) {
+      let count = 0;
+      for (const entry of tree) {
+        count += 1;
+        if (entry.children) {
+          count += countTreeNodes(entry.children);
+        }
+      }
+      return count;
     }
 
     /**
