@@ -1116,23 +1116,46 @@ module.exports = function (RED) {
     // ═══════════════════════════════════════════════════════════════════
 
     /**
+     * Shared helper — full teardown, optional endpoint override, then reconnect.
+     *
+     * Used by both actionConnect and actionReconnect since the lifecycle is
+     * identical: teardown → recreate client → establish session.
+     *
+     * @param {object} msg - The incoming message.
+     */
+    async function resetAndConnect(msg) {
+      // If a dynamic endpoint is provided, update the endpoint
+      if (msg.OpcUaEndpoint) {
+        node.endpointNode = {
+          ...node.endpointNode,
+          ...msg.OpcUaEndpoint,
+        };
+      }
+
+      // Full teardown
+      await terminateSubscription();
+      await closeSession();
+      await disconnectClient();
+
+      node.client = null;
+      node.session = null;
+      node.hasConnected = false;
+
+      // Recreate client and connect — initializeClient only auto-connects
+      // when connectOnStart is true, so we explicitly connect afterwards.
+      await initializeClient();
+      if (!node.session) {
+        await connectAndCreateSession();
+      }
+    }
+
+    /**
      * CONNECT — Dynamic connect (can change endpoint at runtime).
+     * Supports msg.OpcUaEndpoint to override endpoint configuration.
      */
     async function actionConnect(msg, send, done) {
       try {
-        // If a dynamic endpoint is provided, update the endpoint
-        if (msg.OpcUaEndpoint) {
-          node.endpointNode = {
-            ...node.endpointNode,
-            ...msg.OpcUaEndpoint,
-          };
-        }
-
-        await disconnectClient();
-        node.client = null;
-        node.session = null;
-        await initializeClient();
-
+        await resetAndConnect(msg);
         msg.payload = "Connected";
         send([msg, null, null]);
         done();
@@ -1161,19 +1184,11 @@ module.exports = function (RED) {
 
     /**
      * RECONNECT — Disconnect and re-establish the connection.
+     * Supports msg.OpcUaEndpoint to override endpoint configuration.
      */
     async function actionReconnect(msg, send, done) {
       try {
-        await terminateSubscription();
-        await closeSession();
-        await disconnectClient();
-
-        node.client = null;
-        node.session = null;
-        node.hasConnected = false;
-
-        await initializeClient();
-
+        await resetAndConnect(msg);
         msg.payload = "Reconnected";
         send([msg, null, null]);
         done();

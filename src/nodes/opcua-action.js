@@ -6,12 +6,14 @@
  * Depending on the selected action, additional message properties are set:
  *   - subscribe/monitor/events: `msg.interval`, `msg.queueSize`
  *   - monitor:                  `msg.deadbandType`, `msg.deadbandValue`
- *   - events:                   `msg.customEventFields`
+ *   - events:                   `msg.customEventFields`, `msg.eventTypeIds`
  *   - browse:                   `msg.collect`, `msg.maxDepth`
  *   - history:                  `msg.aggregate`, `msg.numValuesPerNode`,
- *                               `msg.processingInterval`, `msg.returnBounds`
+ *                               `msg.processingInterval`, `msg.returnBounds`,
+ *                               `msg.start`, `msg.end`
  *   - acknowledge:              `msg.comment`
  *   - method:                   `msg.objectId`, `msg.methodId`
+ *   - connect/reconnect:        `msg.OpcUaEndpoint`
  *
  * ─── Outputs ──────────────────────────────────────────────────────────
  *   Output 1 — Message with `msg.action` and sub-configuration set
@@ -39,6 +41,7 @@ module.exports = function (RED) {
 
     // ── Events only ─────────────────────────────────────────────────────
     this.customEventFields = config.customEventFields || "";
+    this.eventTypeIds      = config.eventTypeIds || "";
 
     // ── Browse ──────────────────────────────────────────────────────────
     this.collect  = config.collect === true;
@@ -50,12 +53,19 @@ module.exports = function (RED) {
     this.processingInterval = Number(config.processingInterval) || 3600000;
     this.returnBounds       = config.returnBounds === true;
 
+    // ── History time range ─────────────────────────────────────────────
+    this.historyRange     = Number(config.historyRange) || 1;
+    this.historyRangeUnit = config.historyRangeUnit || "h";
+
     // ── Acknowledge ─────────────────────────────────────────────────────
     this.comment = config.comment || "Acknowledged from Node-RED";
 
     // ── Method ──────────────────────────────────────────────────────────
     this.objectId = config.objectId || "";
     this.methodId = config.methodId || "";
+
+    // ── Connect / Reconnect ─────────────────────────────────────────────
+    this.endpointUrl = config.endpointUrl || "";
 
     const node = this;
 
@@ -65,6 +75,10 @@ module.exports = function (RED) {
 
       switch (node.action) {
         case "subscribe":
+          msg.interval  = msg.interval  || toMilliseconds(node.time, node.timeUnit);
+          msg.queueSize = msg.queueSize || node.queueSize;
+          break;
+
         case "events":
           msg.interval  = msg.interval  || toMilliseconds(node.time, node.timeUnit);
           msg.queueSize = msg.queueSize || node.queueSize;
@@ -82,12 +96,18 @@ module.exports = function (RED) {
           msg.maxDepth = msg.maxDepth || node.maxDepth;
           break;
 
-        case "history":
+        case "history": {
           msg.aggregate          = msg.aggregate          || node.aggregate;
           msg.numValuesPerNode   = msg.numValuesPerNode   || node.numValuesPerNode;
           msg.processingInterval = msg.processingInterval || node.processingInterval;
           msg.returnBounds       = msg.returnBounds       ?? node.returnBounds;
+          // Compute start/end from relative range if not already set
+          const rangeMs = toMilliseconds(node.historyRange, node.historyRangeUnit);
+          const now     = new Date();
+          msg.end   = msg.end   || now;
+          msg.start = msg.start || new Date(now.getTime() - rangeMs);
           break;
+        }
 
         case "acknowledge":
           msg.comment = msg.comment || node.comment;
@@ -96,6 +116,14 @@ module.exports = function (RED) {
         case "method":
           msg.objectId = msg.objectId || node.objectId;
           msg.methodId = msg.methodId || node.methodId;
+          break;
+
+        case "connect":
+        case "reconnect":
+          if (node.endpointUrl) {
+            msg.OpcUaEndpoint = msg.OpcUaEndpoint || {};
+            msg.OpcUaEndpoint.endpoint = msg.OpcUaEndpoint.endpoint || node.endpointUrl;
+          }
           break;
       }
 
@@ -107,6 +135,17 @@ module.exports = function (RED) {
           .filter(Boolean);
         if (fields.length > 0) {
           msg.customEventFields = msg.customEventFields || fields;
+        }
+      }
+
+      // Events: parse event type IDs from comma-separated string
+      if (node.action === "events" && node.eventTypeIds) {
+        const ids = node.eventTypeIds
+          .split(",")
+          .map((id) => id.trim())
+          .filter(Boolean);
+        if (ids.length > 0) {
+          msg.eventTypeIds = msg.eventTypeIds || ids;
         }
       }
 

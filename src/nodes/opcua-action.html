@@ -27,16 +27,25 @@
       // Browse
       collect:             { value: false },
       maxDepth:            { value: 1 },
+      // Events
+      eventTypeIds:        { value: "" },
+      // Browse
+      collect:             { value: false },
+      maxDepth:            { value: 1 },
       // History
       aggregate:           { value: "raw" },
       numValuesPerNode:    { value: 1000 },
       processingInterval:  { value: 3600000 },
       returnBounds:        { value: false },
+      historyRange:        { value: 1 },
+      historyRangeUnit:    { value: "h" },
       // Acknowledge
       comment:             { value: "Acknowledged from Node-RED" },
       // Method
       objectId:            { value: "" },
       methodId:            { value: "" },
+      // Connect / Reconnect
+      endpointUrl:         { value: "" },
     },
     inputs: 1,
     outputs: 1,
@@ -54,11 +63,14 @@
       var defaults = {
         time: 10, timeUnit: "s", queueSize: 10,
         deadbandtype: "a", deadbandvalue: 1,
-        customEventFields: "", collect: false, maxDepth: 1,
+        customEventFields: "", eventTypeIds: "",
+        collect: false, maxDepth: 1,
         aggregate: "raw", numValuesPerNode: 1000,
         processingInterval: 3600000, returnBounds: false,
+        historyRange: 1, historyRangeUnit: "h",
         comment: "Acknowledged from Node-RED",
         objectId: "", methodId: "",
+        endpointUrl: "",
       };
       var self = this;
       Object.keys(defaults).forEach(function (key) {
@@ -84,16 +96,20 @@
         var isHistory  = action === "history";
         var isAck      = action === "acknowledge";
         var isMethod   = action === "method";
+        var isConnect  = ["connect", "reconnect"].includes(action);
 
         $(".action-interval-row").toggle(isSubLike);
         $(".action-queuesize-row").toggle(isSubLike);
         $(".action-deadband-row").toggle(isMonitor);
         $(".action-eventfields-row").toggle(isEvents);
+        $(".action-eventtypes-row").toggle(isEvents);
         $(".action-browse-row").toggle(isBrowse);
         $(".action-history-row").toggle(isHistory);
         $(".action-history-aggregate-row").toggle(isHistory);
+        $(".action-history-range-row").toggle(isHistory);
         $(".action-acknowledge-row").toggle(isAck);
         $(".action-method-row").toggle(isMethod);
+        $(".action-connect-row").toggle(isConnect);
 
         // Show processingInterval only for non-raw aggregates
         if (isHistory) {
@@ -195,6 +211,12 @@
     <input type="text" id="node-input-customEventFields" placeholder="Field1, Field2, ...">
   </div>
 
+  <!-- ── Events: Event Type IDs ──────────────────────────────────────── -->
+  <div class="form-row action-eventtypes-row" style="display: none;">
+    <label for="node-input-eventTypeIds"><i class="fa fa-filter"></i> Event Types</label>
+    <input type="text" id="node-input-eventTypeIds" placeholder="i=2041 (default: BaseEventType)">
+  </div>
+
   <!-- ── Browse: Collect Mode ────────────────────────────────────────── -->
   <div class="form-row action-browse-row" style="display: none;">
     <label for="node-input-collect"><i class="fa fa-sitemap"></i> Collect</label>
@@ -225,6 +247,19 @@
     <input type="number" id="node-input-numValuesPerNode" style="width: 100px;" min="1" placeholder="1000">
   </div>
 
+  <!-- ── History: Time Range ─────────────────────────────────────────── -->
+  <div class="form-row action-history-range-row" style="display: none;">
+    <label for="node-input-historyRange"><i class="fa fa-calendar"></i> Time Range</label>
+    <span style="margin-right: 5px;">Last</span>
+    <input type="number" id="node-input-historyRange" style="width: 80px;" min="1" placeholder="1">
+    <select id="node-input-historyRangeUnit" style="width: 100px;">
+      <option value="ms">milliseconds</option>
+      <option value="s">seconds</option>
+      <option value="m">minutes</option>
+      <option value="h">hours</option>
+    </select>
+  </div>
+
   <div class="form-row action-history-processing-row" style="display: none;">
     <label for="node-input-processingInterval"><i class="fa fa-hourglass"></i> Processing Int.</label>
     <input type="number" id="node-input-processingInterval" style="width: 120px;" min="0" placeholder="3600000">
@@ -251,6 +286,12 @@
   <div class="form-row action-method-row" style="display: none;">
     <label for="node-input-methodId"><i class="fa fa-cog"></i> Method ID</label>
     <input type="text" id="node-input-methodId" placeholder="ns=2;s=MyMethod">
+  </div>
+
+  <!-- ── Connect / Reconnect: Endpoint URL ─────────────────────────── -->
+  <div class="form-row action-connect-row" style="display: none;">
+    <label for="node-input-endpointUrl"><i class="fa fa-globe"></i> Endpoint URL</label>
+    <input type="text" id="node-input-endpointUrl" placeholder="opc.tcp://localhost:4840 (optional override)">
   </div>
 
   <!-- Node name -->
@@ -306,6 +347,9 @@
   <dl class="message-properties">
     <dt>customEventFields <span class="property-type">string[]</span></dt>
     <dd>Additional event fields to request beyond the standard set (comma-separated in config).</dd>
+    <dt>eventTypeIds <span class="property-type">string[]</span></dt>
+    <dd>Event type NodeIds to filter on (comma-separated, e.g. <code>i=2041</code>).
+    Defaults to <code>BaseEventType</code> if not set.</dd>
   </dl>
 
   <h4>Browse</h4>
@@ -322,6 +366,11 @@
     <code>ave</code>, or <code>interpolative</code>.</dd>
     <dt>numValuesPerNode <span class="property-type">number</span></dt>
     <dd>Maximum number of historical values to return per node (default: 1000).</dd>
+    <dt>start <span class="property-type">Date</span></dt>
+    <dd>Start of historical range. Computed from the configured time range
+    (e.g. "last 1 hour") unless overridden on <code>msg.start</code>.</dd>
+    <dt>end <span class="property-type">Date</span></dt>
+    <dd>End of historical range. Defaults to now unless overridden on <code>msg.end</code>.</dd>
     <dt>processingInterval <span class="property-type">number</span></dt>
     <dd>Processing interval in ms for aggregate queries (not used for raw). Default: 3600000.</dd>
     <dt>returnBounds <span class="property-type">boolean</span></dt>
@@ -335,7 +384,15 @@
   </dl>
 
   <h4>Method</h4>
+  <dl c
+
+  <h4>Connect / Reconnect</h4>
   <dl class="message-properties">
+    <dt>OpcUaEndpoint.endpoint <span class="property-type">string</span></dt>
+    <dd>Optional override endpoint URL (e.g. <code>opc.tcp://host:4840</code>).
+    Allows changing the server address at runtime. Leave empty to use the endpoint
+    configured on the Client node.</dd>
+  </dl>lass="message-properties">
     <dt>objectId <span class="property-type">string</span></dt>
     <dd>NodeId of the object containing the method (e.g. <code>ns=2;s=MyObject</code>).</dd>
     <dt>methodId <span class="property-type">string</span></dt>
