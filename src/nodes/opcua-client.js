@@ -757,7 +757,11 @@ module.exports = function (RED) {
     }
 
     /**
-     * INFO — Read all attributes of a node.
+     * INFO — Read all attributes of one or more nodes.
+     *
+     * When `msg.items` is present, reads attributes for every item and
+     * sends per-item on output 1, batch on output 3 (same pattern as read).
+     * Falls back to single `msg.topic` for backward compatibility.
      */
     async function actionInfo(msg, send, done) {
       if (!assertSession(msg, done)) return;
@@ -765,6 +769,45 @@ module.exports = function (RED) {
       try {
         setStatus("reading");
 
+        // Multi-item path
+        if (msg.items?.length) {
+          const { items: _items, ...baseMsg } = msg;
+
+          const results = [];
+          for (const item of msg.items) {
+            const attributes = await node.session.readAllAttributes(item.nodeId);
+            results.push({ item, attributes });
+
+            // Per-item message on output 1
+            const itemMsg = {
+              ...baseMsg,
+              topic: item.nodeId,
+              datatype: item.datatype,
+              browseName: item.browseName,
+              payload: attributes,
+            };
+            send([itemMsg, null, null]);
+          }
+
+          // Batch message on output 3
+          const batchMsg = {
+            topic: "info",
+            items: results.map((r) => ({
+              nodeId: r.item.nodeId,
+              datatype: r.item.datatype,
+              browseName: r.item.browseName,
+              attributes: r.attributes,
+            })),
+            payload: results.map((r) => r.attributes),
+          };
+          send([null, null, batchMsg]);
+
+          setStatusWithDetail("read done", `${results.length} items`);
+          done();
+          return;
+        }
+
+        // Single-node fallback
         const nodeId = resolveNodeId(msg);
         const attributes = await node.session.readAllAttributes(nodeId);
 
@@ -799,7 +842,7 @@ module.exports = function (RED) {
         const allFields = [...baseFields, ...customFields];
         const eventFilter = opcua.constructEventFilter(allFields);
 
-        const eventNodeId = msg.topic || "i=2253"; // Default: Server object
+        const eventNodeId = resolveNodeId(msg) || "i=2253"; // Default: Server object
         const eventTypeIds = msg.eventTypeIds || "i=2041"; // Default: BaseEvent
 
         const monitoredItem = opcua.ClientMonitoredItem.create(
@@ -877,7 +920,11 @@ module.exports = function (RED) {
     // ═══════════════════════════════════════════════════════════════════
 
     /**
-     * HISTORY — Read historical values or aggregates.
+     * HISTORY — Read historical values or aggregates for one or more nodes.
+     *
+     * When `msg.items` is present, reads history for every item and sends
+     * per-item on output 1, batch on output 3 (same pattern as read).
+     * Falls back to a single node when no `msg.items` is present.
      */
     async function actionHistory(msg, send, done) {
       if (!assertSession(msg, done)) return;
@@ -885,42 +932,77 @@ module.exports = function (RED) {
       try {
         setStatus("reading");
 
-        const nodeId = resolveNodeId(msg);
         const start = msg.start ? new Date(msg.start) : new Date(Date.now() - 3600000);
         const end = msg.end ? new Date(msg.end) : new Date();
         const aggregate = msg.aggregate || "raw";
+        const numValuesPerNode = msg.numValuesPerNode || 1000;
+        const returnBounds = msg.returnBounds || false;
+        const processingInterval = msg.processingInterval || 3600000;
 
-        let result;
+        const aggregateMap = {
+          min:           opcua.AggregateFunction.Minimum,
+          max:           opcua.AggregateFunction.Maximum,
+          ave:           opcua.AggregateFunction.Average,
+          interpolative: opcua.AggregateFunction.Interpolative,
+        };
 
-        if (aggregate === "raw") {
-          result = await node.session.readHistoryValue(
-            nodeId,
-            start,
-            end,
-            {
-              numValuesPerNode: msg.numValuesPerNode || 1000,
-              returnBounds: msg.returnBounds || false,
-            }
-          );
-        } else {
-          // Aggregate reads
-          const aggregateMap = {
-            min:           opcua.AggregateFunction.Minimum,
-            max:           opcua.AggregateFunction.Maximum,
-            ave:           opcua.AggregateFunction.Average,
-            interpolative: opcua.AggregateFunction.Interpolative,
-          };
+        /**
+         * Read history for a single nodeId.
+         */
+        async function readHistoryForNode(nodeId) {
+          if (aggregate === "raw") {
+            return node.session.readHistoryValue(
+              nodeId, start, end,
+              { numValuesPerNode, returnBounds }
+            );
+          }
           const aggregateFn = aggregateMap[aggregate] || opcua.AggregateFunction.Average;
-          const processingInterval = msg.processingInterval || 3600000;
-
-          result = await node.session.readAggregateValue(
-            { nodeId },
-            start,
-            end,
-            aggregateFn,
-            processingInterval
+          return node.session.readAggregateValue(
+            { nodeId }, start, end, aggregateFn, processingInterval
           );
         }
+
+        // Multi-item path
+        if (msg.items?.length) {
+          const { items: _items, ...baseMsg } = msg;
+
+          const results = [];
+          for (const item of msg.items) {
+            const result = await readHistoryForNode(item.nodeId);
+            results.push({ item, result });
+
+            // Per-item message on output 1
+            const itemMsg = {
+              ...baseMsg,
+              topic: item.nodeId,
+              datatype: item.datatype,
+              browseName: item.browseName,
+              payload: result,
+            };
+            send([itemMsg, null, null]);
+          }
+
+          // Batch message on output 3
+          const batchMsg = {
+            topic: "history",
+            items: results.map((r) => ({
+              nodeId: r.item.nodeId,
+              datatype: r.item.datatype,
+              browseName: r.item.browseName,
+              history: r.result,
+            })),
+            payload: results.map((r) => r.result),
+          };
+          send([null, null, batchMsg]);
+
+          setStatusWithDetail("read done", `${results.length} items`);
+          done();
+          return;
+        }
+
+        // Single-node fallback
+        const nodeId = resolveNodeId(msg);
+        const result = await readHistoryForNode(nodeId);
 
         msg.payload = result;
         send([msg, null, null]);
@@ -1077,12 +1159,21 @@ module.exports = function (RED) {
 
     /**
      * REGISTER — Register node IDs for faster repeated access.
+     *
+     * Uses `msg.items` to extract the list of nodeIds to register.
      */
     async function actionRegister(msg, send, done) {
       if (!assertSession(msg, done)) return;
 
       try {
-        const nodeIds = Array.isArray(msg.payload) ? msg.payload : [msg.topic];
+        const items = msg.items;
+        if (!items?.length) {
+          node.warn("No items to register — msg.items is empty or missing");
+          done();
+          return;
+        }
+
+        const nodeIds = items.map((item) => item.nodeId);
         const registeredNodes = await node.session.registerNodes(nodeIds);
 
         msg.payload = registeredNodes;
@@ -1095,12 +1186,21 @@ module.exports = function (RED) {
 
     /**
      * UNREGISTER — Unregister previously registered nodes.
+     *
+     * Uses `msg.items` to extract the list of nodeIds to unregister.
      */
     async function actionUnregister(msg, send, done) {
       if (!assertSession(msg, done)) return;
 
       try {
-        const nodeIds = Array.isArray(msg.payload) ? msg.payload : [msg.topic];
+        const items = msg.items;
+        if (!items?.length) {
+          node.warn("No items to unregister — msg.items is empty or missing");
+          done();
+          return;
+        }
+
+        const nodeIds = items.map((item) => item.nodeId);
         await node.session.unregisterNodes(nodeIds);
 
         msg.payload = "Nodes unregistered";
@@ -1365,25 +1465,20 @@ module.exports = function (RED) {
     /**
      * Resolve the OPC UA NodeId from the message.
      *
-     * Supports:
-     *  - `msg.topic` as a NodeId string (ns=2;s=...)
-     *  - `msg.topic` with `datatype=` suffix (stripped)
-     *  - `msg.topic` with `br=` prefix (browse path — not translated here)
+     * Uses `msg.items[0].nodeId` from the standard item pipeline.
+     * Returns an empty string if no items are present.
+     *
+     * Warns when multiple items are provided since this function is
+     * used by single-node actions that only process the first item.
      */
     function resolveNodeId(msg) {
-      let topic = msg.topic || "";
-
-      // Strip datatype suffix if present: "ns=2;s=Var datatype=Double"
-      if (topic.includes("datatype=")) {
-        topic = topic.split("datatype=")[0].trim();
+      if (msg.items?.length > 1) {
+        node.warn(
+          `Action "${msg.action}" uses a single node — only the first item ` +
+          `(${msg.items[0].nodeId}) will be used, ${msg.items.length - 1} item(s) ignored`
+        );
       }
-
-      // Strip semicolon-delimited datatype: "ns=2;s=Var;datatype=Int32"
-      if (topic.includes(";datatype=")) {
-        topic = topic.split(";datatype=")[0];
-      }
-
-      return topic;
+      return msg.items?.[0]?.nodeId || "";
     }
 
     // ─── Status helpers ──────────────────────────────────────────────
