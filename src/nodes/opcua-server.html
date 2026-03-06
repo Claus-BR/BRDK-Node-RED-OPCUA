@@ -17,6 +17,7 @@
       registerToDiscovery:       { value: false },
       constructDefaultAddressSpace: { value: true },
       allowAnonymous:            { value: true },
+      startOnDeploy:             { value: true },
       sessionTimeout:            { value: 30000, validate: RED.validators.number() },
       // Security modes
       endpointNone:              { value: true },
@@ -49,7 +50,8 @@
       maxSubscriptionsPerSession: { value: 50, validate: RED.validators.number() },
     },
     inputs: 1,
-    outputs: 1,
+    outputs: 2,
+    outputLabels: ["data", "status"],
     icon: "opcuanodeLogo.png",
     label: function () {
       return this.name || `OPC UA Server :${this.port}`;
@@ -136,6 +138,13 @@
         <input type="checkbox" id="node-input-allowAnonymous" style="width:auto;">
         <label for="node-input-allowAnonymous" style="width:70%;">
           Allow anonymous access
+        </label>
+      </div>
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <input type="checkbox" id="node-input-startOnDeploy" style="width:auto;">
+        <label for="node-input-startOnDeploy" style="width:70%;">
+          Start server on deploy
         </label>
       </div>
     </div>
@@ -318,8 +327,10 @@
   </dl>
 
   <h3>Outputs</h3>
-  <p>Emits session events (client connect/disconnect) and variable write notifications.
+  <p><b>Output 1 (Data)</b> — Session events (client connect/disconnect), variable write notifications, and command results.
   Variable-write notifications include both <code>msg.items</code> and the legacy <code>msg.payload</code> format.</p>
+  <p><b>Output 2 (Status)</b> — Status and error notifications for all server operations.
+  Each status message includes <code>msg.payload</code> (status key), <code>msg.status</code>, and optionally <code>msg.detail</code> and <code>msg.error</code>.</p>
 
   <h3>Configuration</h3>
   <ul>

@@ -67,6 +67,36 @@ const STATUS_MAP = {
   "read error":         { fill: "red",    shape: "ring", text: "read error" },
   "browse error":       { fill: "red",    shape: "ring", text: "browse error" },
   "method error":       { fill: "red",    shape: "ring", text: "method error" },
+  "command error":      { fill: "red",    shape: "ring", text: "command error" },
+
+  // ── Server lifecycle ─────────────────────────────────────────────────────
+  "running":            { fill: "green",  shape: "dot",  text: "running" },
+  "restarting":         { fill: "yellow", shape: "dot",  text: "restarting" },
+  "shutting down":      { fill: "yellow", shape: "dot",  text: "shutting down" },
+  "server stopped":     { fill: "red",    shape: "ring", text: "server stopped" },
+
+  // ── Server commands ──────────────────────────────────────────────────────
+  "variable added":     { fill: "green",  shape: "dot",  text: "variable added" },
+  "folder added":       { fill: "green",  shape: "dot",  text: "folder added" },
+  "folder set":         { fill: "green",  shape: "dot",  text: "folder set" },
+  "node deleted":       { fill: "green",  shape: "dot",  text: "node deleted" },
+  "equipment added":    { fill: "green",  shape: "dot",  text: "equipment added" },
+  "asset added":        { fill: "green",  shape: "dot",  text: "asset added" },
+  "method added":       { fill: "green",  shape: "dot",  text: "method added" },
+  "method bound":       { fill: "green",  shape: "dot",  text: "method bound" },
+  "historian installed":{ fill: "green",  shape: "dot",  text: "historian installed" },
+  "alarm installed":    { fill: "green",  shape: "dot",  text: "alarm installed" },
+  "extension object added": { fill: "green", shape: "dot", text: "extension object added" },
+  "file added":         { fill: "green",  shape: "dot",  text: "file added" },
+  "namespace registered": { fill: "green", shape: "dot",  text: "namespace registered" },
+  "users updated":      { fill: "green",  shape: "dot",  text: "users updated" },
+  "address space saved": { fill: "green", shape: "dot",  text: "address space saved" },
+  "address space loaded": { fill: "green", shape: "dot", text: "address space loaded" },
+  "variables bound":    { fill: "green",  shape: "dot",  text: "variables bound" },
+  "updating variables": { fill: "green",  shape: "dot",  text: "updating variables" },
+  "client connected":   { fill: "green",  shape: "dot",  text: "client connected" },
+  "client disconnected":{ fill: "green",  shape: "ring", text: "client disconnected" },
+  "session activated":  { fill: "green",  shape: "dot",  text: "session activated" },
 
   // ── Idle / default ───────────────────────────────────────────────────────
   "waiting":            { fill: "blue",   shape: "ring", text: "waiting" },

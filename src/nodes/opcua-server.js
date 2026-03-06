@@ -18,13 +18,14 @@
  *   USERS:        setUsers
  *   EXT OBJECTS:  addExtensionObject
  *   PERSISTENCE:  saveAddressSpace, loadAddressSpace, bindVariables
- *   LIFECYCLE:    restartOPCUAServer
+ *   LIFECYCLE:    restartOPCUAServer, startOPCUAServer, closeOPCUAServer
  *
  * VARIABLE UPDATES (no command):
  *   msg.items — [{ nodeId, datatype, value, quality?, sourceTimestamp? }]
  *
  * ─── Outputs ───────────────────────────────────────────────────────────────────
  *   Output 1 — Session events, variable changes by clients, command results
+ *   Output 2 — Status and error notifications for all server operations
  *   Variable-write notifications include: msg.items [{ nodeId, datatype, browseName, value }]
  */
 
@@ -64,6 +65,7 @@ module.exports = function (RED) {
     this.registerToDiscovery          = config.registerToDiscovery === true;
     this.constructDefaultAddressSpace = config.constructDefaultAddressSpace !== false;
     this.allowAnonymous               = config.allowAnonymous !== false;
+    this.startOnDeploy                 = config.startOnDeploy !== false;
     this.sessionTimeout               = Number(config.sessionTimeout) || 30000;
 
     // Security modes
@@ -109,27 +111,55 @@ module.exports = function (RED) {
     this.users         = [];       // User credentials array
     this.initialized   = false;
     this.isClosing     = false;
+    this.cmdQueue      = [];       // Messages queued while server is starting
 
     // ── Load users from file ───────────────────────────────────────────
     loadUsersFromFile(node);
 
     // ── Start the server ───────────────────────────────────────────────
-    startServer();
+    if (this.startOnDeploy) {
+      startServer();
+    } else {
+      setNodeStatus("waiting");
+    }
 
     // ═══════════════════════════════════════════════════════════════════
     //  INPUT HANDLER
     // ═══════════════════════════════════════════════════════════════════
 
     node.on("input", async (msg, send, done) => {
+      // Allow lifecycle commands even when server is not running
+      const lifecycleCommands = ["startOPCUAServer", "restartOPCUAServer", "closeOPCUAServer"];
+      const command = msg.command;
+
       if (!node.initialized || !node.server) {
-        node.warn("Server not initialized yet, queuing is not supported");
+        // Lifecycle commands always pass through
+        if (lifecycleCommands.includes(command)) {
+          await handleCommand(command, msg, send, done);
+          return;
+        }
+
+        // Lazy start: if server was not started on deploy, start it now and queue the message
+        if (!node.startOnDeploy && !node.isClosing) {
+          node.cmdQueue.push({ msg, send, done });
+          node.startOnDeploy = true; // prevent multiple startups
+          startServer();
+          return;
+        }
+
+        // Server is still starting — queue the message
+        if (!node.isClosing) {
+          node.cmdQueue.push({ msg, send, done });
+          return;
+        }
+
+        setNodeStatus("error", "server not initialized");
+        node.warn("Server not initialized, closed by command");
         done();
         return;
       }
 
       try {
-        const command = msg.command;
-
         if (command) {
           await handleCommand(command, msg, send, done);
         } else if (isVariableUpdate(msg)) {
@@ -138,6 +168,7 @@ module.exports = function (RED) {
           done();
         }
       } catch (err) {
+        setNodeStatus("command error", err.message);
         node.error(`Input handler error: ${err.message}`, msg);
         done(err);
       }
@@ -149,6 +180,7 @@ module.exports = function (RED) {
 
     node.on("close", async (done) => {
       node.isClosing = true;
+      setNodeStatus("shutting down");
       try {
         if (node.server) {
           await node.server.shutdown(0);
@@ -169,7 +201,7 @@ module.exports = function (RED) {
 
     async function startServer() {
       try {
-        setNodeStatus("creating client");
+        setNodeStatus("connecting");
 
         // Initialize certificate managers
         const serverCertManager = new opcua.OPCUACertificateManager({
@@ -267,9 +299,28 @@ module.exports = function (RED) {
         setNodeStatus("running", `port ${port}`);
         node.log(`OPC UA Server running on port ${port}`);
 
+        // Replay any queued commands
+        replayCommandQueue();
+
       } catch (err) {
-        setNodeStatus("error", err.message);
-        node.error(`Server start failed: ${err.message}`);
+        handleCommandError("error", err, {}, () => {});
+      }
+    }
+
+    /**
+     * Replay all queued commands after server is initialized.
+     */
+    function replayCommandQueue() {
+      const queued = node.cmdQueue.splice(0);
+      for (const { msg, send, done } of queued) {
+        const command = msg.command;
+        if (command) {
+          handleCommand(command, msg, send, done);
+        } else if (isVariableUpdate(msg)) {
+          handleVariableUpdates(msg, send, done);
+        } else {
+          done();
+        }
       }
     }
 
@@ -280,6 +331,8 @@ module.exports = function (RED) {
     async function handleCommand(command, msg, send, done) {
       const handlers = {
         restartOPCUAServer:   () => cmdRestartServer(msg, send, done),
+        startOPCUAServer:     () => cmdStartServer(msg, send, done),
+        closeOPCUAServer:     () => cmdCloseServer(msg, send, done),
         addVariable:          () => cmdAddVariable(msg, send, done),
         addFolder:            () => cmdAddFolder(msg, send, done),
         setFolder:            () => cmdSetFolder(msg, send, done),
@@ -306,6 +359,7 @@ module.exports = function (RED) {
       if (handler) {
         await handler();
       } else {
+        setNodeStatus("command error", `unknown: ${command}`);
         node.warn(`Unknown OPC UA command: ${command}`);
         done();
       }
@@ -318,6 +372,7 @@ module.exports = function (RED) {
     function handleVariableUpdates(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
       handleItemsVariableUpdate(addressSpace, msg.items);
+      setNodeStatus("updating variables", `${msg.items.length} item(s)`);
       done();
     }
 
@@ -372,7 +427,7 @@ module.exports = function (RED) {
      * Restart the OPC UA server.
      */
     async function cmdRestartServer(msg, send, done) {
-      setNodeStatus("reconnecting", "restarting");
+      setNodeStatus("restarting");
       node.initialized = false;
 
       try {
@@ -385,11 +440,62 @@ module.exports = function (RED) {
         }
 
         await startServer();
+        msg.payload = "Server restarted";
+        send([msg, null]);
         done();
       } catch (err) {
-        setNodeStatus("error", err.message);
-        node.error(`Restart failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
+      }
+    }
+
+    /**
+     * Start the OPC UA server (if not already running).
+     */
+    async function cmdStartServer(msg, send, done) {
+      if (node.initialized && node.server) {
+        msg.payload = "Server already running";
+        send([msg, null]);
+        done();
+        return;
+      }
+
+      try {
+        await startServer();
+        msg.payload = "Server started";
+        send([msg, null]);
+        done();
+      } catch (err) {
+        handleCommandError("command error", err, msg, done);
+      }
+    }
+
+    /**
+     * Shut down the OPC UA server without restarting.
+     */
+    async function cmdCloseServer(msg, send, done) {
+      if (!node.server) {
+        setNodeStatus("server stopped");
+        msg.payload = "Server already stopped";
+        send([msg, null]);
+        done();
+        return;
+      }
+
+      try {
+        setNodeStatus("shutting down");
+        node.initialized = false;
+        node.server.engine.setShutdownReason("Close command received");
+        await node.server.shutdown(10000);
+        node.server.dispose();
+        node.server = null;
+        node.vendorName = null;
+
+        setNodeStatus("server stopped");
+        msg.payload = "Server stopped";
+        send([msg, null]);
+        done();
+      } catch (err) {
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -446,11 +552,11 @@ module.exports = function (RED) {
         }
 
         msg.items = outputItems;
-        send(msg);
+        setNodeStatus("variable added", `${outputItems.length} variable(s)`);
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`addVariable failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -496,10 +602,12 @@ module.exports = function (RED) {
           const itemNs = resolveNamespace(addressSpace, item.nodeId);
           itemNs.addObject(folderOpts);
         }
+        setNodeStatus("folder added", `${items.length} folder(s)`);
+        msg.payload = `${items.length} folder(s) added`;
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`addFolder failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -519,6 +627,9 @@ module.exports = function (RED) {
       const folder = addressSpace.findNode(nodeId);
       if (folder) {
         node.currentFolder = folder;
+        setNodeStatus("folder set", nodeId);
+        msg.payload = `Current folder set to ${nodeId}`;
+        send([msg, null]);
       } else {
         node.warn(`Folder not found: ${nodeId}`);
       }
@@ -554,10 +665,12 @@ module.exports = function (RED) {
             node.warn(`Node not found for deletion: ${nid}`);
           }
         }
+        setNodeStatus("node deleted", `${nodeIds.length} node(s)`);
+        msg.payload = `${nodeIds.length} node(s) deleted`;
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`deleteNode failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -582,10 +695,12 @@ module.exports = function (RED) {
           displayName: name,
           eventSourceOf: addressSpace.rootFolder.objects.server,
         });
+        setNodeStatus("equipment added", name);
+        msg.payload = `Equipment added: ${name}`;
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`addEquipment failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -609,10 +724,12 @@ module.exports = function (RED) {
           browseName: name,
           displayName: name,
         });
+        setNodeStatus("asset added", name);
+        msg.payload = `Physical asset added: ${name}`;
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`addPhysicalAsset failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -664,10 +781,12 @@ module.exports = function (RED) {
           callback(null, { statusCode: opcua.StatusCodes.BadNotImplemented });
         });
 
+        setNodeStatus("method added", methodName);
+        msg.payload = `Method added: ${methodName}`;
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`addMethod failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -694,10 +813,12 @@ module.exports = function (RED) {
         }
 
         method.bindMethod(methodFunc);
+        setNodeStatus("method bound", methodNodeId);
+        msg.payload = `Method bound: ${methodNodeId}`;
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`bindMethod failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -728,10 +849,12 @@ module.exports = function (RED) {
             maxOnlineValues: 1000,
           });
         }
+        setNodeStatus("historian installed", `${items.length} variable(s)`);
+        msg.payload = `Historian installed on ${items.length} variable(s)`;
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`installHistorian failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -801,10 +924,12 @@ module.exports = function (RED) {
           });
         }
 
+        setNodeStatus("alarm installed", `discrete, ${items.length} node(s)`);
+        msg.payload = `Discrete alarm installed on ${items.length} node(s)`;
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`installDiscreteAlarm failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -880,10 +1005,12 @@ module.exports = function (RED) {
           });
         }
 
+        setNodeStatus("alarm installed", `limit, ${items.length} node(s)`);
+        msg.payload = `Limit alarm installed on ${items.length} node(s)`;
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`installLimitAlarm failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -922,10 +1049,12 @@ module.exports = function (RED) {
           },
         });
 
+        setNodeStatus("extension object added", name);
+        msg.payload = `Extension object added: ${name}`;
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`addExtensionObject failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -963,10 +1092,12 @@ module.exports = function (RED) {
           mimeType: "application/octet-stream",
         });
 
+        setNodeStatus("file added", fileName);
+        msg.payload = `File added: ${fileName}`;
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`addFile failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -986,11 +1117,11 @@ module.exports = function (RED) {
       try {
         const ns = addressSpace.registerNamespace(namespaceUri);
         msg.payload = `ns=${ns.index}`;
-        send(msg);
+        setNodeStatus("namespace registered", namespaceUri);
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`registerNamespace failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -1010,11 +1141,10 @@ module.exports = function (RED) {
       try {
         const ns = addressSpace.getNamespace(namespaceUri);
         msg.payload = ns ? `ns=${ns.index}` : "Namespace not found";
-        send(msg);
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`getNamespaceIndex failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -1030,7 +1160,7 @@ module.exports = function (RED) {
       }
 
       msg.payload = namespaces;
-      send(msg);
+      send([msg, null]);
       done();
     }
 
@@ -1047,7 +1177,10 @@ module.exports = function (RED) {
       }
 
       node.users = newUsers;
+      setNodeStatus("users updated", `${newUsers.length} user(s)`);
       node.log(`Users updated: ${newUsers.length} user(s)`);
+      msg.payload = `${newUsers.length} user(s) updated`;
+      send([msg, null]);
       done();
     }
 
@@ -1070,11 +1203,11 @@ module.exports = function (RED) {
         const xmlContent = ns.toNodeset2XML();
         fs.writeFileSync(filename, xmlContent, "utf8");
         msg.payload = `Address space saved to ${filename}`;
-        send(msg);
+        setNodeStatus("address space saved", filename);
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`saveAddressSpace failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -1097,6 +1230,7 @@ module.exports = function (RED) {
       }
 
       node.log(`Loading address space from ${filename} — server will restart`);
+      setNodeStatus("address space loaded", filename);
       // Store the file path for the next start cycle to load it as a nodeset
       node._loadedAddressSpaceFile = filename;
       await cmdRestartServer(msg, send, done);
@@ -1137,11 +1271,11 @@ module.exports = function (RED) {
         }
 
         msg.payload = `Bound ${results.length} variables`;
-        send(msg);
+        setNodeStatus("variables bound", `${results.length} variable(s)`);
+        send([msg, null]);
         done();
       } catch (err) {
-        node.error(`bindVariables failed: ${err.message}`, msg);
-        done(err);
+        handleCommandError("command error", err, msg, done);
       }
     }
 
@@ -1217,27 +1351,32 @@ module.exports = function (RED) {
 
       server.on("create_session", (session) => {
         if (node.isClosing) return;
-        node.send({
+        const name = session.sessionName || "unknown";
+        setNodeStatus("client connected", name);
+        node.send([{
           topic: "Client-connected",
-          payload: session.sessionName || "unknown",
-        });
+          payload: name,
+        }, null]);
       });
 
       server.on("session_closed", (session, reason) => {
         if (node.isClosing) return;
-        node.send({
+        const name = session.sessionName || "unknown";
+        setNodeStatus("client disconnected", name);
+        node.send([{
           topic: "Client-disconnected",
-          payload: session.sessionName || "unknown",
-        });
+          payload: name,
+        }, null]);
       });
 
       server.on("session_activated", (session) => {
         if (node.isClosing) return;
         if (session.userIdentityToken?.userName) {
-          node.send({
+          setNodeStatus("session activated", session.userIdentityToken.userName);
+          node.send([{
             topic: "Username",
             payload: session.userIdentityToken.userName,
-          });
+          }, null]);
         }
       });
     }
@@ -1291,14 +1430,14 @@ module.exports = function (RED) {
 
         // Notify downstream when a client writes
         if (sendFn) {
-          sendFn({
+          sendFn([{
             items: [{
               nodeId: variableNode.nodeId.toString(),
               datatype: datatype,
               browseName: key,
               value: newValue,
             }],
-          });
+          }, null]);
         }
 
         return opcua.StatusCodes.Good;
@@ -1311,13 +1450,32 @@ module.exports = function (RED) {
     }
 
     /**
-     * Set node status display.
+     * Set the node status display and send a status message on output 2.
      */
     function setNodeStatus(statusKey, detail) {
       const status = detail
         ? getStatusWithDetail(statusKey, detail)
         : getStatus(statusKey);
       node.status(status);
+
+      // Send status notification on output 2
+      const isError = statusKey.includes("error") || statusKey === "disconnected" || statusKey === "terminated";
+      const statusMsg = {
+        payload: statusKey,
+        status: statusKey,
+      };
+      if (detail) statusMsg.detail = detail;
+      if (isError) statusMsg.error = statusKey;
+      node.send([null, statusMsg]);
+    }
+
+    /**
+     * Handle an error from a command handler.
+     */
+    function handleCommandError(statusKey, err, msg, done) {
+      setNodeStatus(statusKey, err.message);
+      node.error(err.message, msg);
+      done(err);
     }
   }
 

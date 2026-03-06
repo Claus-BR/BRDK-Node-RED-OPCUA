@@ -23,6 +23,9 @@
  *   - getNamespaceIndex:    msg.namespaceUri
  *   - saveAddressSpace:     msg.namespaceIndex, msg.filename
  *   - loadAddressSpace:     msg.filename
+ *   - startOPCUAServer:    (no extra properties)
+ *   - closeOPCUAServer:    (no extra properties)
+ *   - restartOPCUAServer:  (no extra properties)
  *
  * ─── Outputs ──────────────────────────────────────────────────────────
  *   Output 1 — Message with `msg.command` and properties set
@@ -211,8 +214,8 @@ module.exports = function (RED) {
           // Users array must come from upstream msg
           break;
 
-        // ── Lifecycle ─────────────────────────────────────────────────
-        case "restartOPCUAServer":
+        // ── Lifecycle ─────────────────────────────────────────────────        case "startOPCUAServer":
+        case "closeOPCUAServer":        case "restartOPCUAServer":
           break;
 
         default:

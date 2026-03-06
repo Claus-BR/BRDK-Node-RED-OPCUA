@@ -180,6 +180,8 @@
         <option value="setUsers">Set Users</option>
       </optgroup>
       <optgroup label="Lifecycle">
+        <option value="startOPCUAServer">Start Server</option>
+        <option value="closeOPCUAServer">Close Server</option>
         <option value="restartOPCUAServer">Restart Server</option>
       </optgroup>
     </select>
@@ -431,6 +433,10 @@
 
   <h4>Lifecycle</h4>
   <dl class="message-properties">
+    <dt>startOPCUAServer</dt>
+    <dd>Start the OPC UA server (useful when <em>Start on deploy</em> is disabled).</dd>
+    <dt>closeOPCUAServer</dt>
+    <dd>Shut down the OPC UA server gracefully.</dd>
     <dt>restartOPCUAServer</dt>
     <dd>Shut down and restart the OPC UA server.</dd>
   </dl>
