@@ -8,14 +8,16 @@
     color: "#E9967A",
     defaults: {
       name:                      { value: "" },
-      port:                      { value: 53880, validate: RED.validators.number() },
+      port:                      { value: 4840, validate: RED.validators.number() },
       endpoint:                  { value: "" },
+      hostname:                  { value: "" },
       users:                     { value: "" },
       nodesetDir:                { value: "" },
       autoAcceptUnknownCertificate: { value: true },
       registerToDiscovery:       { value: false },
       constructDefaultAddressSpace: { value: true },
       allowAnonymous:            { value: true },
+      sessionTimeout:            { value: 30000, validate: RED.validators.number() },
       // Security modes
       endpointNone:              { value: true },
       endpointSign:              { value: true },
@@ -24,6 +26,8 @@
       endpointBasic128Rsa15:     { value: true },
       endpointBasic256:          { value: true },
       endpointBasic256Sha256:    { value: true },
+      endpointAes128Sha256RsaOaep: { value: false },
+      endpointAes256Sha256RsaPss:  { value: false },
       // Operating limits
       maxNodesPerBrowse:         { value: 0 },
       maxNodesPerHistoryReadData: { value: 0 },
@@ -42,6 +46,7 @@
       maxMessageSize:            { value: 4096, validate: RED.validators.number() },
       maxBufferSize:             { value: 4096, validate: RED.validators.number() },
       maxSessions:               { value: 20, validate: RED.validators.number() },
+      maxSubscriptionsPerSession: { value: 50, validate: RED.validators.number() },
     },
     inputs: 1,
     outputs: 1,
@@ -83,11 +88,19 @@
       </div>
       <div class="form-row">
         <label for="node-input-port"><i class="fa fa-plug"></i> Port</label>
-        <input type="number" id="node-input-port" placeholder="53880" min="1" max="65535">
+        <input type="number" id="node-input-port" placeholder="4840" min="1" max="65535">
       </div>
       <div class="form-row">
         <label for="node-input-endpoint"><i class="fa fa-globe"></i> Endpoint</label>
         <input type="text" id="node-input-endpoint" placeholder="UA/NodeREDServer">
+      </div>
+      <div class="form-row">
+        <label for="node-input-hostname"><i class="fa fa-server"></i> Hostname</label>
+        <input type="text" id="node-input-hostname" placeholder="Auto-detect (os.hostname())">
+      </div>
+      <div class="form-row">
+        <label for="node-input-sessionTimeout"><i class="fa fa-clock-o"></i> Session Timeout</label>
+        <input type="number" id="node-input-sessionTimeout" placeholder="30000" min="1000"> <span style="color:#888;">ms</span>
       </div>
       <div class="form-row">
         <label for="node-input-users"><i class="fa fa-users"></i> Users File</label>
@@ -164,6 +177,16 @@
         <input type="checkbox" id="node-input-endpointBasic256Sha256" style="width:auto;">
         <label for="node-input-endpointBasic256Sha256" style="width:70%;">Basic256Sha256</label>
       </div>
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <input type="checkbox" id="node-input-endpointAes128Sha256RsaOaep" style="width:auto;">
+        <label for="node-input-endpointAes128Sha256RsaOaep" style="width:70%;">Aes128-Sha256-RsaOaep</label>
+      </div>
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <input type="checkbox" id="node-input-endpointAes256Sha256RsaPss" style="width:auto;">
+        <label for="node-input-endpointAes256Sha256RsaPss" style="width:70%;">Aes256-Sha256-RsaPss</label>
+      </div>
     </div>
 
     <!-- ── Limits Tab ──────────────────────────────────────────── -->
@@ -237,6 +260,10 @@
         <label for="node-input-maxSessions">Max Sessions</label>
         <input type="number" id="node-input-maxSessions" min="10">
       </div>
+      <div class="form-row">
+        <label for="node-input-maxSubscriptionsPerSession">Subscriptions / Session</label>
+        <input type="number" id="node-input-maxSubscriptionsPerSession" min="1">
+      </div>
     </div>
   </div>
 </script>
@@ -273,7 +300,14 @@
     <dt>bindVariables</dt><dd>Bind get/set callbacks to all variables</dd>
   </dl>
 
-  <h4>Variable Updates (<code>msg.payload.messageType = "Variable"</code>)</h4>
+  <h4>Variable Updates — <code>msg.items</code> (preferred)</h4>
+  <dl class="message-properties">
+    <dt>msg.items <span class="property-type">array</span></dt>
+    <dd>Array of <code>[{ nodeId, datatype, value, quality?, sourceTimestamp? }]</code>.
+    Item nodes can be wired directly into the server to update variable values.</dd>
+  </dl>
+
+  <h4>Variable Updates — Legacy (<code>msg.payload.messageType = "Variable"</code>)</h4>
   <dl class="message-properties">
     <dt>namespace <span class="property-type">number</span></dt><dd>Namespace index</dd>
     <dt>variableName <span class="property-type">string</span></dt><dd>Variable name or id</dd>
@@ -284,7 +318,8 @@
   </dl>
 
   <h3>Outputs</h3>
-  <p>Emits session events (client connect/disconnect) and variable write notifications.</p>
+  <p>Emits session events (client connect/disconnect) and variable write notifications.
+  Variable-write notifications include both <code>msg.items</code> and the legacy <code>msg.payload</code> format.</p>
 
   <h3>Configuration</h3>
   <ul>

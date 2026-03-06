@@ -4,7 +4,11 @@
  *
  * Supports dynamic address space management via input messages:
  *
- *   VARIABLES:    addVariable, deleteNode, (and messageType=Variable for value updates)
+ *   msg.command — the server command to execute
+ *   msg.items   — array of item objects for node-targeting commands
+ *
+ * COMMANDS:
+ *   VARIABLES:    addVariable, deleteNode
  *   FOLDERS:      setFolder, addFolder
  *   METHODS:      addMethod, bindMethod
  *   ALARMS:       installDiscreteAlarm, installLimitAlarm
@@ -16,8 +20,12 @@
  *   PERSISTENCE:  saveAddressSpace, loadAddressSpace, bindVariables
  *   LIFECYCLE:    restartOPCUAServer
  *
+ * VARIABLE UPDATES (no command):
+ *   msg.items — [{ nodeId, datatype, value, quality?, sourceTimestamp? }]
+ *
  * ─── Outputs ───────────────────────────────────────────────────────────────────
  *   Output 1 — Session events, variable changes by clients, command results
+ *   Variable-write notifications include: msg.items [{ nodeId, datatype, browseName, value }]
  */
 
 "use strict";
@@ -44,9 +52,10 @@ module.exports = function (RED) {
     const node = this;
 
     // ── Configuration from editor ──────────────────────────────────────
-    this.port           = Number(process.env.SERVER_PORT || config.port) || 53880;
+    this.port           = Number(process.env.SERVER_PORT || config.port) || 4840;
     this.name           = config.name || "";
     this.resourcePath   = config.endpoint || "";
+    this.hostname       = config.hostname || "";
     this.usersFile      = config.users || "";
     this.nodesetDir     = config.nodesetDir || "";
 
@@ -55,6 +64,7 @@ module.exports = function (RED) {
     this.registerToDiscovery          = config.registerToDiscovery === true;
     this.constructDefaultAddressSpace = config.constructDefaultAddressSpace !== false;
     this.allowAnonymous               = config.allowAnonymous !== false;
+    this.sessionTimeout               = Number(config.sessionTimeout) || 30000;
 
     // Security modes
     this.endpointNone          = config.endpointNone !== false;
@@ -62,9 +72,11 @@ module.exports = function (RED) {
     this.endpointSignEncrypt   = config.endpointSignEncrypt !== false;
 
     // Security policies
-    this.endpointBasic128Rsa15   = config.endpointBasic128Rsa15 !== false;
-    this.endpointBasic256        = config.endpointBasic256 !== false;
-    this.endpointBasic256Sha256  = config.endpointBasic256Sha256 !== false;
+    this.endpointBasic128Rsa15        = config.endpointBasic128Rsa15 !== false;
+    this.endpointBasic256             = config.endpointBasic256 !== false;
+    this.endpointBasic256Sha256       = config.endpointBasic256Sha256 !== false;
+    this.endpointAes128Sha256RsaOaep  = config.endpointAes128Sha256RsaOaep === true;
+    this.endpointAes256Sha256RsaPss   = config.endpointAes256Sha256RsaPss === true;
 
     // Operating limits
     this.maxNodesPerBrowse                          = Number(config.maxNodesPerBrowse) || 0;
@@ -85,6 +97,7 @@ module.exports = function (RED) {
     this.maxMessageSize            = Number(config.maxMessageSize) || 4096;
     this.maxBufferSize             = Number(config.maxBufferSize) || 4096;
     this.maxSessions               = Math.max(Number(config.maxSessions) || 20, 10);
+    this.maxSubscriptionsPerSession = Number(config.maxSubscriptionsPerSession) || 50;
 
     // ── Internal state ─────────────────────────────────────────────────
     this.server        = null;
@@ -115,7 +128,7 @@ module.exports = function (RED) {
       }
 
       try {
-        const command = msg.payload?.opcuaCommand;
+        const command = msg.command;
 
         if (command) {
           await handleCommand(command, msg, send, done);
@@ -182,15 +195,18 @@ module.exports = function (RED) {
         if (node.endpointBasic128Rsa15) securityPolicies.push(opcua.SecurityPolicy.Basic128Rsa15);
         if (node.endpointBasic256) securityPolicies.push(opcua.SecurityPolicy.Basic256);
         if (node.endpointBasic256Sha256) securityPolicies.push(opcua.SecurityPolicy.Basic256Sha256);
+        if (node.endpointAes128Sha256RsaOaep) securityPolicies.push(opcua.SecurityPolicy.Aes128_Sha256_RsaOaep);
+        if (node.endpointAes256Sha256RsaPss) securityPolicies.push(opcua.SecurityPolicy.Aes256_Sha256_RsaPss);
 
         // Collect nodeset XML files
         const nodesetFiles = collectNodesetFiles(node);
 
         // Build server options
-        const hostname = os.hostname();
+        const hostname = node.hostname || os.hostname();
         const serverOptions = {
           port: node.port,
           resourcePath: node.resourcePath ? `/${node.resourcePath}` : undefined,
+          hostname: node.hostname || undefined,
           nodeset_filename: nodesetFiles,
           serverCertificateManager: serverCertManager,
           userCertificateManager: userCertManager,
@@ -199,6 +215,8 @@ module.exports = function (RED) {
           securityPolicies,
           maxConnectionsPerEndpoint: node.maxConnectionsPerEndpoint,
           maxSessions: node.maxSessions,
+          maxSubscriptionsPerSession: node.maxSubscriptionsPerSession,
+          timeout: node.sessionTimeout,
           serverInfo: {
             applicationUri: opcua.makeApplicationUrn(hostname, "BRDK-NodeRED-OPCUA-Server"),
             productUri: "BRDK-NodeRED-OPCUA-Server",
@@ -234,13 +252,12 @@ module.exports = function (RED) {
         await node.server.start();
         node.initialized = true;
 
-        // Install alarm/condition and aggregate support
+        // Install aggregate support on the server address space
         try {
           const addressSpace = node.server.engine.addressSpace;
-          opcua.installAlarmMonitoring(addressSpace);
           opcua.addAggregateSupport(addressSpace);
         } catch {
-          // Not critical if these fail
+          // Not critical if this fails
         }
 
         // Register session event handlers
@@ -295,62 +312,56 @@ module.exports = function (RED) {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    //  VARIABLE UPDATES (messageType: "Variable")
+    //  VARIABLE UPDATES
     // ═══════════════════════════════════════════════════════════════════
 
     function handleVariableUpdates(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const items = Array.isArray(msg.payload) ? msg.payload : [msg.payload];
+      handleItemsVariableUpdate(addressSpace, msg.items);
+      done();
+    }
 
+    /**
+     * Process variable updates from msg.items format.
+     * Each item: { nodeId, datatype, value, browseName?, quality?, sourceTimestamp? }
+     */
+    function handleItemsVariableUpdate(addressSpace, items) {
       for (const item of items) {
-        if (item.messageType !== "Variable") continue;
+        if (!item.nodeId || item.value === undefined) continue;
 
-        const { namespace, variableName, variableValue, datatype, quality, sourceTimestamp } = item;
-        const key = `${namespace}:${variableName}`;
-        const nodeId = typeof variableName === "number"
-          ? `ns=${namespace};i=${variableName}`
-          : `ns=${namespace};s=${variableName}`;
-
-        const vnode = addressSpace.findNode(nodeId);
+        const vnode = addressSpace.findNode(item.nodeId);
         if (!vnode) {
-          node.warn(`Variable not found: ${nodeId}`);
+          node.warn(`Variable not found: ${item.nodeId}`);
           continue;
         }
 
-        node.variables[key] = variableValue;
+        const key = deriveVariableKey(item.nodeId);
+        const datatype = item.datatype || "Double";
 
-        if (quality || sourceTimestamp) {
-          // Write with quality/timestamp via PseudoSession
-          const statusCode = resolveStatusCode(quality);
-          const ts = sourceTimestamp ? new Date(sourceTimestamp) : new Date();
+        node.variables[key] = item.value;
+
+        if (item.quality || item.sourceTimestamp) {
+          const statusCode = resolveStatusCode(item.quality);
+          const ts = item.sourceTimestamp ? new Date(item.sourceTimestamp) : new Date();
           node.variablesTs[key] = ts;
           node.variablesStatus[key] = statusCode;
 
           try {
             const session = new opcua.PseudoSession(addressSpace);
-            const dataValue = converter.buildDataValue(
-              datatype || "Double",
-              variableValue,
-              ts,
-              statusCode,
-            );
-
+            const dataValue = converter.buildDataValue(datatype, item.value, ts, statusCode);
             session.write({
-              nodeId: opcua.coerceNodeId(nodeId),
+              nodeId: opcua.coerceNodeId(item.nodeId),
               attributeId: opcua.AttributeIds.Value,
               value: dataValue,
             });
           } catch (err) {
-            node.warn(`PseudoSession write error: ${err.message}`);
+            node.warn(`PseudoSession write error for ${item.nodeId}: ${err.message}`);
           }
         } else {
-          // Simple value update
-          const builtValue = converter.buildDataValue(datatype || "Double", variableValue);
+          const builtValue = converter.buildDataValue(datatype, item.value);
           vnode.setValueFromSource(builtValue);
         }
       }
-
-      done();
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -383,16 +394,16 @@ module.exports = function (RED) {
     }
 
     /**
-     * Add a variable to the address space.
+     * Add variable(s) to the address space.
      *
-     * msg.topic format: ns=X;s=Name;datatype=Type[;value=V][;description=D][;browseName=BN][;displayName=DN]
+     * msg.items: [{ nodeId, datatype, value?, description?, browseName?, displayName? }]
      */
     function cmdAddVariable(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const parsed = parseTopicString(msg.topic);
+      const items = msg.items || [];
 
-      if (!parsed.nodeId || !parsed.datatype) {
-        node.warn("addVariable requires msg.topic with nodeId and datatype");
+      if (items.length === 0) {
+        node.warn("addVariable requires msg.items with at least one item (nodeId, datatype)");
         done();
         return;
       }
@@ -405,24 +416,36 @@ module.exports = function (RED) {
       }
 
       try {
-        const varOpts = buildVariableOptions(addressSpace, parsed, msg);
-        varOpts.componentOf = parentFolder;
+        const namespace = addressSpace.getOwnNamespace();
+        const outputItems = [];
 
-        const newVar = addressSpace.addVariable(varOpts);
+        for (const item of items) {
+          if (!item.nodeId || !item.datatype) {
+            node.warn("addVariable item missing nodeId or datatype, skipping");
+            continue;
+          }
 
-        // Store initial value
-        const ns = parsed.namespace || "1";
-        const key = `${ns}:${parsed.name}`;
-        node.variables[key] = parsed.value || getDefaultForType(parsed.datatype);
+          const varOpts = buildVariableOptions(addressSpace, item, msg);
+          varOpts.componentOf = parentFolder;
 
-        // Bind get/set callbacks
-        bindVariableGetSet(newVar, key, parsed.datatype, send);
+          const itemNs = resolveNamespace(addressSpace, item.nodeId);
+          const newVar = itemNs.addVariable(varOpts);
 
-        msg.payload = {
-          messageType: "Variable",
-          variableName: parsed.name,
-          nodeId: newVar.nodeId.toString(),
-        };
+          // Store initial value
+          const key = deriveVariableKey(item.nodeId);
+          node.variables[key] = item.value ?? getDefaultForType(item.datatype);
+
+          // Bind get/set callbacks
+          bindVariableGetSet(newVar, key, item.datatype, send);
+
+          outputItems.push({
+            nodeId: newVar.nodeId.toString(),
+            datatype: item.datatype,
+            browseName: item.browseName || deriveNodeName(item.nodeId),
+          });
+        }
+
+        msg.items = outputItems;
         send(msg);
         done();
       } catch (err) {
@@ -432,11 +455,19 @@ module.exports = function (RED) {
     }
 
     /**
-     * Add a folder to the address space.
+     * Add folder(s) to the address space.
+     *
+     * msg.items: [{ nodeId, browseName?, displayName?, description? }]
      */
     function cmdAddFolder(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const parsed = parseTopicString(msg.topic);
+      const items = msg.items || [];
+
+      if (items.length === 0) {
+        node.warn("addFolder requires msg.items with at least one item (nodeId)");
+        done();
+        return;
+      }
 
       const parentFolder = node.currentFolder || node.vendorName;
       if (!parentFolder) {
@@ -446,21 +477,25 @@ module.exports = function (RED) {
       }
 
       try {
-        const folderOpts = {
-          organizedBy: parentFolder,
-          browseName: parsed.browseName || parsed.name,
-          displayName: parsed.displayName || parsed.name,
-          nodeId: parsed.nodeId,
-        };
+        const namespace = addressSpace.getOwnNamespace();
+        for (const item of items) {
+          const name = item.browseName || deriveNodeName(item.nodeId);
+          const folderOpts = {
+            organizedBy: parentFolder,
+            typeDefinition: "FolderType",
+            browseName: name,
+            displayName: item.displayName || name,
+            nodeId: item.nodeId,
+          };
 
-        if (parsed.description) {
-          folderOpts.description = parsed.description;
+          if (item.description) {
+            folderOpts.description = item.description;
+          }
+
+          applyAccessControl(folderOpts, msg);
+          const itemNs = resolveNamespace(addressSpace, item.nodeId);
+          itemNs.addObject(folderOpts);
         }
-
-        // Apply access control from msg
-        applyAccessControl(folderOpts, msg);
-
-        addressSpace.addFolder(parentFolder, folderOpts);
         done();
       } catch (err) {
         node.error(`addFolder failed: ${err.message}`, msg);
@@ -473,10 +508,10 @@ module.exports = function (RED) {
      */
     function cmdSetFolder(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const nodeId = msg.topic;
+      const nodeId = msg.items?.[0]?.nodeId || msg.nodeId;
 
       if (!nodeId) {
-        node.warn("setFolder requires msg.topic with a nodeId");
+        node.warn("setFolder requires msg.nodeId or msg.items[0].nodeId");
         done();
         return;
       }
@@ -491,24 +526,33 @@ module.exports = function (RED) {
     }
 
     /**
-     * Delete a node from the address space.
+     * Delete node(s) from the address space.
+     *
+     * msg.items: [{ nodeId }]  or  msg.nodeId for a single node
      */
     function cmdDeleteNode(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const nodeId = msg.payload?.nodeId;
+      const items = msg.items || [];
+      const singleNodeId = msg.nodeId;
 
-      if (!nodeId) {
-        node.warn("deleteNode requires msg.payload.nodeId");
+      if (items.length === 0 && !singleNodeId) {
+        node.warn("deleteNode requires msg.nodeId or msg.items");
         done();
         return;
       }
 
       try {
-        const nodeToDelete = addressSpace.findNode(nodeId);
-        if (nodeToDelete) {
-          addressSpace.deleteNode(nodeToDelete);
-        } else {
-          node.warn(`Node not found for deletion: ${nodeId}`);
+        const nodeIds = items.length > 0
+          ? items.map(i => i.nodeId)
+          : [singleNodeId];
+
+        for (const nid of nodeIds) {
+          const nodeToDelete = addressSpace.findNode(nid);
+          if (nodeToDelete) {
+            addressSpace.deleteNode(nodeToDelete);
+          } else {
+            node.warn(`Node not found for deletion: ${nid}`);
+          }
         }
         done();
       } catch (err) {
@@ -522,16 +566,17 @@ module.exports = function (RED) {
      */
     function cmdAddEquipment(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const name = msg.payload?.nodeName;
+      const name = msg.nodeName;
 
       if (!name || !node.vendorName) {
-        node.warn("addEquipment requires msg.payload.nodeName and a default address space");
+        node.warn("addEquipment requires msg.nodeName and a default address space");
         done();
         return;
       }
 
       try {
-        addressSpace.addObject({
+        const namespace = addressSpace.getOwnNamespace();
+        namespace.addObject({
           organizedBy: node.vendorName,
           browseName: name,
           displayName: name,
@@ -549,16 +594,17 @@ module.exports = function (RED) {
      */
     function cmdAddPhysicalAsset(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const name = msg.payload?.nodeName;
+      const name = msg.nodeName;
 
       if (!name || !node.vendorName) {
-        node.warn("addPhysicalAsset requires msg.payload.nodeName");
+        node.warn("addPhysicalAsset requires msg.nodeName");
         done();
         return;
       }
 
       try {
-        addressSpace.addObject({
+        const namespace = addressSpace.getOwnNamespace();
+        namespace.addObject({
           organizedBy: node.vendorName,
           browseName: name,
           displayName: name,
@@ -575,13 +621,13 @@ module.exports = function (RED) {
      */
     function cmdAddMethod(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const parentNodeId = msg.topic;
-      const methodName = msg.browseName;
+      const parentNodeId = msg.parentNodeId;
+      const methodName = msg.methodName || msg.browseName;
       const inputArgs = msg.inputArguments || [];
       const outputArgs = msg.outputArguments || [];
 
       if (!parentNodeId || !methodName) {
-        node.warn("addMethod requires msg.topic (parent) and msg.browseName");
+        node.warn("addMethod requires msg.parentNodeId and msg.methodName");
         done();
         return;
       }
@@ -606,7 +652,8 @@ module.exports = function (RED) {
           dataType: toOpcuaDataType(arg.type || "String"),
         }));
 
-        const method = addressSpace.addMethod(parentNode, {
+        const namespace = addressSpace.getOwnNamespace();
+        const method = namespace.addMethod(parentNode, {
           browseName: methodName,
           inputArguments: methodInputArgs,
           outputArguments: methodOutputArgs,
@@ -629,11 +676,11 @@ module.exports = function (RED) {
      */
     function cmdBindMethod(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const methodNodeId = msg.topic;
+      const methodNodeId = msg.items?.[0]?.nodeId || msg.nodeId;
       const methodFunc = msg.code;
 
       if (!methodNodeId || !methodFunc) {
-        node.warn("bindMethod requires msg.topic (method nodeId) and msg.code (function)");
+        node.warn("bindMethod requires msg.nodeId and msg.code (function)");
         done();
         return;
       }
@@ -655,29 +702,32 @@ module.exports = function (RED) {
     }
 
     /**
-     * Install historian on a variable.
+     * Install historian on variable(s).
+     *
+     * msg.items: [{ nodeId }]
      */
     function cmdInstallHistorian(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const parsed = parseTopicString(msg.topic);
+      const items = msg.items || [];
 
-      if (!parsed.nodeId) {
-        node.warn("installHistorian requires msg.topic with nodeId");
+      if (items.length === 0) {
+        node.warn("installHistorian requires msg.items with nodeId(s)");
         done();
         return;
       }
 
       try {
-        const variable = addressSpace.findNode(parsed.nodeId);
-        if (!variable) {
-          node.warn(`Variable not found for historian: ${parsed.nodeId}`);
-          done();
-          return;
-        }
+        for (const item of items) {
+          const variable = addressSpace.findNode(item.nodeId);
+          if (!variable) {
+            node.warn(`Variable not found for historian: ${item.nodeId}`);
+            continue;
+          }
 
-        addressSpace.installHistoricalDataNode(variable, {
-          maxOnlineValues: 1000,
-        });
+          addressSpace.installHistoricalDataNode(variable, {
+            maxOnlineValues: 1000,
+          });
+        }
         done();
       } catch (err) {
         node.error(`installHistorian failed: ${err.message}`, msg);
@@ -686,62 +736,70 @@ module.exports = function (RED) {
     }
 
     /**
-     * Install a discrete (boolean) alarm on a variable.
+     * Install a discrete (boolean) alarm on variable(s).
+     *
+     * msg.items: [{ nodeId }], msg.priority, msg.alarmText
      */
     function cmdInstallDiscreteAlarm(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const parsed = parseTopicString(msg.topic);
+      const items = msg.items || [];
 
-      if (!parsed.nodeId) {
-        node.warn("installDiscreteAlarm requires msg.topic with nodeId");
+      if (items.length === 0) {
+        node.warn("installDiscreteAlarm requires msg.items with nodeId(s)");
         done();
         return;
       }
 
       try {
-        const parentNode = addressSpace.findNode(parsed.nodeId);
-        if (!parentNode) {
-          node.warn(`Node not found: ${parsed.nodeId}`);
-          done();
-          return;
-        }
-
         const severity = msg.priority || 100;
-        const alarmText = msg.alarmText || `Alarm on ${parsed.name}`;
 
-        // Create a Boolean "AlarmState" variable
-        const alarmStateVar = addressSpace.addVariable({
-          propertyOf: parentNode,
-          browseName: `${parsed.name}AlarmState`,
-          dataType: "Boolean",
-          value: { dataType: opcua.DataType.Boolean, value: false },
-        });
-
-        // Create the DiscreteAlarm
-        const alarm = addressSpace.instantiateDiscreteAlarm("DiscreteAlarmType", {
-          componentOf: parentNode,
-          browseName: `${parsed.name}DiscreteAlarm`,
-          conditionSource: alarmStateVar,
-          inputNode: alarmStateVar,
-          optionals: ["Acknowledge", "ConfirmedState", "Confirm"],
-        });
-
-        // React to alarm state changes
-        alarmStateVar.on("value_changed", (_event, dataValue) => {
-          const active = dataValue.value.value;
-          if (active) {
-            alarm.activateAlarm();
-            alarm.setAckedState(false);
-            alarm.raiseNewCondition({
-              severity,
-              message: alarmText,
-              quality: opcua.StatusCodes.GoodClamped,
-              retain: true,
-            });
-          } else {
-            alarm.deactivateAlarm();
+        for (const item of items) {
+          const nodeId = item.nodeId;
+          const parentNode = addressSpace.findNode(nodeId);
+          if (!parentNode) {
+            node.warn(`Node not found: ${nodeId}`);
+            continue;
           }
-        });
+
+          const name = deriveNodeName(nodeId);
+          const alarmText = msg.alarmText || `Alarm on ${name}`;
+
+          const namespace = addressSpace.getOwnNamespace();
+
+          // Create a Boolean "AlarmState" variable
+          const alarmStateVar = namespace.addVariable({
+            propertyOf: parentNode,
+            browseName: `${name}AlarmState`,
+            dataType: "Boolean",
+            value: { dataType: opcua.DataType.Boolean, value: false },
+          });
+
+          // Create the DiscreteAlarm
+          const alarm = namespace.instantiateDiscreteAlarm("DiscreteAlarmType", {
+            componentOf: parentNode,
+            browseName: `${name}DiscreteAlarm`,
+            conditionSource: alarmStateVar,
+            inputNode: alarmStateVar,
+            optionals: ["Acknowledge", "ConfirmedState", "Confirm"],
+          });
+
+          // React to alarm state changes
+          alarmStateVar.on("value_changed", (_event, dataValue) => {
+            const active = dataValue.value.value;
+            if (active) {
+              alarm.activateAlarm();
+              alarm.setAckedState(false);
+              alarm.raiseNewCondition({
+                severity,
+                message: alarmText,
+                quality: opcua.StatusCodes.GoodClamped,
+                retain: true,
+              });
+            } else {
+              alarm.deactivateAlarm();
+            }
+          });
+        }
 
         done();
       } catch (err) {
@@ -751,68 +809,76 @@ module.exports = function (RED) {
     }
 
     /**
-     * Install a non-exclusive limit alarm (HH/H/L/LL) on a variable.
+     * Install a non-exclusive limit alarm (HH/H/L/LL) on variable(s).
+     *
+     * msg.items: [{ nodeId }], msg.priority, msg.alarmText, msg.hh/h/l/ll
      */
     function cmdInstallLimitAlarm(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const parsed = parseTopicString(msg.topic);
+      const items = msg.items || [];
 
-      if (!parsed.nodeId) {
-        node.warn("installLimitAlarm requires msg.topic with nodeId");
+      if (items.length === 0) {
+        node.warn("installLimitAlarm requires msg.items with nodeId(s)");
         done();
         return;
       }
 
       try {
-        const parentNode = addressSpace.findNode(parsed.nodeId);
-        if (!parentNode) {
-          node.warn(`Node not found: ${parsed.nodeId}`);
-          done();
-          return;
-        }
-
         const severity = msg.priority || 100;
-        const alarmText = msg.alarmText || `Limit alarm on ${parsed.name}`;
         const hh = msg.hh ?? 90;
         const h  = msg.h  ?? 70;
         const l  = msg.l  ?? 30;
         const ll = msg.ll ?? 10;
 
-        // Create a Double "LimitState" variable
-        let currentLimitValue = 0;
-        const limitStateVar = addressSpace.addVariable({
-          propertyOf: parentNode,
-          browseName: `${parsed.name}LimitState`,
-          dataType: "Double",
-          value: {
-            get: () => new opcua.Variant({ dataType: opcua.DataType.Double, value: currentLimitValue }),
-            set: (v) => { currentLimitValue = v.value; return opcua.StatusCodes.Good; },
-          },
-        });
+        for (const item of items) {
+          const nodeId = item.nodeId;
+          const parentNode = addressSpace.findNode(nodeId);
+          if (!parentNode) {
+            node.warn(`Node not found: ${nodeId}`);
+            continue;
+          }
 
-        // Create the NonExclusiveLimitAlarm
-        const alarm = addressSpace.instantiateNonExclusiveLimitAlarm("NonExclusiveLimitAlarmType", {
-          componentOf: parentNode,
-          browseName: `${parsed.name}LimitAlarm`,
-          conditionSource: limitStateVar,
-          inputNode: limitStateVar,
-          highHighLimit: hh,
-          highLimit: h,
-          lowLimit: l,
-          lowLowLimit: ll,
-          optionals: ["Acknowledge", "ConfirmedState", "Confirm"],
-        });
+          const name = deriveNodeName(nodeId);
+          const alarmText = msg.alarmText || `Limit alarm on ${name}`;
 
-        // On value change, activate alarm
-        limitStateVar.on("value_changed", () => {
-          alarm.activateAlarm();
-          alarm.raiseNewCondition({
-            severity,
-            message: alarmText,
-            quality: opcua.StatusCodes.Good,
-            retain: true,
+          const namespace = addressSpace.getOwnNamespace();
+
+          // Create a Double "LimitState" variable
+          let currentLimitValue = 0;
+          const limitStateVar = namespace.addVariable({
+            propertyOf: parentNode,
+            browseName: `${name}LimitState`,
+            dataType: "Double",
+            value: {
+              get: () => new opcua.Variant({ dataType: opcua.DataType.Double, value: currentLimitValue }),
+              set: (v) => { currentLimitValue = v.value; return opcua.StatusCodes.Good; },
+            },
           });
-        });
+
+          // Create the NonExclusiveLimitAlarm
+          const alarm = namespace.instantiateNonExclusiveLimitAlarm("NonExclusiveLimitAlarmType", {
+            componentOf: parentNode,
+            browseName: `${name}LimitAlarm`,
+            conditionSource: limitStateVar,
+            inputNode: limitStateVar,
+            highHighLimit: hh,
+            highLimit: h,
+            lowLimit: l,
+            lowLowLimit: ll,
+            optionals: ["Acknowledge", "ConfirmedState", "Confirm"],
+          });
+
+          // On value change, activate alarm
+          limitStateVar.on("value_changed", () => {
+            alarm.activateAlarm();
+            alarm.raiseNewCondition({
+              severity,
+              message: alarmText,
+              quality: opcua.StatusCodes.Good,
+              retain: true,
+            });
+          });
+        }
 
         done();
       } catch (err) {
@@ -823,27 +889,32 @@ module.exports = function (RED) {
 
     /**
      * Add an extension object variable.
+     *
+     * msg.items: [{ nodeId, typeId, browseName?, displayName? }]
      */
     function cmdAddExtensionObject(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const parsed = parseTopicString(msg.topic);
+      const items = msg.items || [];
 
-      if (!parsed.nodeId || !parsed.datatype) {
-        node.warn("addExtensionObject requires msg.topic with nodeId and datatype (TypeId)");
+      if (items.length === 0 || !items[0].nodeId || !items[0].typeId) {
+        node.warn("addExtensionObject requires msg.items[0] with nodeId and typeId");
         done();
         return;
       }
 
       try {
         const parentFolder = node.currentFolder || node.vendorName;
-        const typeId = opcua.coerceNodeId(parsed.datatype);
+        const namespace = addressSpace.getOwnNamespace();
+        const item = items[0];
+        const name = item.browseName || deriveNodeName(item.nodeId);
+        const typeId = opcua.coerceNodeId(item.typeId);
         const extObj = addressSpace.constructExtensionObject(typeId, {});
 
-        addressSpace.addVariable({
+        namespace.addVariable({
           componentOf: parentFolder,
-          browseName: parsed.browseName || parsed.name,
-          displayName: parsed.displayName || parsed.name,
-          nodeId: parsed.nodeId,
+          browseName: name,
+          displayName: item.displayName || name,
+          nodeId: item.nodeId,
           dataType: typeId,
           value: {
             dataType: opcua.DataType.ExtensionObject,
@@ -860,29 +931,36 @@ module.exports = function (RED) {
 
     /**
      * Add a file node with OPC UA file transfer support.
+     *
+     * msg.items: [{ nodeId }] or msg.nodeId, msg.fileName
      */
     function cmdAddFile(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const parsed = parseTopicString(msg.topic);
-      const fileName = msg.payload?.fileName;
+      const nodeId = msg.items?.[0]?.nodeId || msg.nodeId;
+      const fileName = msg.fileName;
 
-      if (!parsed.nodeId || !fileName) {
-        node.warn("addFile requires msg.topic (nodeId) and msg.payload.fileName");
+      if (!nodeId || !fileName) {
+        node.warn("addFile requires nodeId (msg.items[0].nodeId or msg.nodeId) and msg.fileName");
         done();
         return;
       }
 
       try {
         const parentFolder = node.currentFolder || node.vendorName;
+        const namespace = addressSpace.getOwnNamespace();
+        const name = deriveNodeName(nodeId);
 
-        installFileType(addressSpace, {
+        // Instantiate a FileType node, then install file transfer support
+        const fileType = addressSpace.findObjectType("FileType");
+        const fileNode = fileType.instantiate({
           organizedBy: parentFolder,
-          browseName: parsed.name || fileName,
-          nodeId: parsed.nodeId,
-          fileOptions: {
-            filename: fileName,
-            mimeType: "application/octet-stream",
-          },
+          browseName: name || fileName,
+          nodeId: nodeId,
+        });
+
+        installFileType(fileNode, {
+          filename: fileName,
+          mimeType: "application/octet-stream",
         });
 
         done();
@@ -897,10 +975,10 @@ module.exports = function (RED) {
      */
     function cmdRegisterNamespace(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const namespaceUri = msg.topic;
+      const namespaceUri = msg.namespaceUri;
 
       if (!namespaceUri) {
-        node.warn("registerNamespace requires msg.topic with namespace URI");
+        node.warn("registerNamespace requires msg.namespaceUri");
         done();
         return;
       }
@@ -921,10 +999,10 @@ module.exports = function (RED) {
      */
     function cmdGetNamespaceIndex(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const namespaceUri = msg.topic;
+      const namespaceUri = msg.namespaceUri;
 
       if (!namespaceUri) {
-        node.warn("getNamespaceIndex requires msg.topic with namespace URI");
+        node.warn("getNamespaceIndex requires msg.namespaceUri");
         done();
         return;
       }
@@ -960,10 +1038,10 @@ module.exports = function (RED) {
      * Set user credentials at runtime.
      */
     function cmdSetUsers(msg, send, done) {
-      const newUsers = msg.payload?.users;
+      const newUsers = msg.users;
 
       if (!Array.isArray(newUsers)) {
-        node.warn("setUsers requires msg.payload.users as an array");
+        node.warn("setUsers requires msg.users as an array");
         done();
         return;
       }
@@ -978,7 +1056,7 @@ module.exports = function (RED) {
      */
     function cmdSaveAddressSpace(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
-      const nsIndex = msg.topic ? parseInt(msg.topic, 10) : 1;
+      const nsIndex = msg.namespaceIndex !== undefined ? parseInt(msg.namespaceIndex, 10) : 1;
       const filename = msg.filename || `addressSpace_ns${nsIndex}.xml`;
 
       try {
@@ -1214,11 +1292,12 @@ module.exports = function (RED) {
         // Notify downstream when a client writes
         if (sendFn) {
           sendFn({
-            payload: {
-              messageType: "Variable",
-              variableName: key,
-              variableValue: newValue,
-            },
+            items: [{
+              nodeId: variableNode.nodeId.toString(),
+              datatype: datatype,
+              browseName: key,
+              value: newValue,
+            }],
           });
         }
 
@@ -1279,20 +1358,7 @@ function loadUsersFromFile(node) {
  * Collect nodeset XML files for the server.
  */
 function collectNodesetFiles(node) {
-  const xmlDir = path.join(__dirname, "..", "public", "vendor", "opc-foundation", "xml");
-  const files = [path.join(xmlDir, "Opc.Ua.NodeSet2.xml")];
-
-  // Standard nodesets
-  const standardNodesets = [
-    "Opc.Ua.Di.NodeSet2.xml",
-    "Opc.Ua.AutoID.NodeSet2.xml",
-    "Opc.ISA95.NodeSet2.xml",
-  ];
-
-  for (const ns of standardNodesets) {
-    const nsPath = path.join(xmlDir, ns);
-    if (fs.existsSync(nsPath)) files.push(nsPath);
-  }
+  const files = [opcua.nodesets.standard];
 
   // Custom nodeset directory
   if (node.nodesetDir && fs.existsSync(node.nodesetDir)) {
@@ -1331,60 +1397,18 @@ function buildOperationLimits(node) {
 }
 
 /**
- * Parse a topic string like "ns=1;s=MyVar;datatype=Double;value=42;description=Test;browseName=BN;displayName=DN"
- */
-function parseTopicString(topic) {
-  if (!topic) return {};
-
-  const result = { nodeId: "", name: "", namespace: "1", datatype: "", value: null };
-
-  // Extract key=value pairs separated by semicolons
-  const parts = topic.split(";");
-  const nodeIdParts = [];
-
-  for (const part of parts) {
-    const trimmed = part.trim();
-
-    if (trimmed.startsWith("ns=")) {
-      result.namespace = trimmed.substring(3);
-      nodeIdParts.push(trimmed);
-    } else if (trimmed.startsWith("s=")) {
-      result.name = trimmed.substring(2);
-      nodeIdParts.push(trimmed);
-    } else if (trimmed.startsWith("i=")) {
-      result.name = trimmed.substring(2);
-      nodeIdParts.push(trimmed);
-    } else if (trimmed.startsWith("datatype=")) {
-      result.datatype = trimmed.substring(9);
-    } else if (trimmed.startsWith("value=")) {
-      result.value = trimmed.substring(6);
-    } else if (trimmed.startsWith("description=")) {
-      result.description = trimmed.substring(12);
-    } else if (trimmed.startsWith("browseName=")) {
-      result.browseName = trimmed.substring(11);
-    } else if (trimmed.startsWith("displayName=")) {
-      result.displayName = trimmed.substring(12);
-    } else {
-      nodeIdParts.push(trimmed);
-    }
-  }
-
-  result.nodeId = nodeIdParts.join(";");
-  return result;
-}
-
-/**
  * Build variable options for addVariable.
  */
-function buildVariableOptions(addressSpace, parsed, msg) {
-  const datatype = parsed.datatype;
+function buildVariableOptions(addressSpace, item, msg) {
+  const datatype = item.datatype;
   const isArray = datatype.includes("Array");
   const baseType = datatype.replace("Array", "").replace(/\[.*\]/, "");
+  const name = item.browseName || deriveNodeName(item.nodeId);
 
   const opts = {
-    browseName: parsed.browseName || parsed.name,
-    displayName: parsed.displayName || parsed.name,
-    nodeId: parsed.nodeId,
+    browseName: name,
+    displayName: item.displayName || name,
+    nodeId: item.nodeId,
     dataType: baseType,
     accessLevel: opcua.makeAccessLevelFlag("CurrentRead | CurrentWrite"),
     userAccessLevel: opcua.makeAccessLevelFlag("CurrentRead | CurrentWrite"),
@@ -1395,8 +1419,8 @@ function buildVariableOptions(addressSpace, parsed, msg) {
     accessRestrictions: opcua.AccessRestrictionsFlag.None,
   };
 
-  if (parsed.description) {
-    opts.description = parsed.description;
+  if (item.description) {
+    opts.description = item.description;
   }
 
   // Handle array dimensions
@@ -1485,9 +1509,44 @@ function resolveStatusCode(quality) {
  * Check if a message is a variable update.
  */
 function isVariableUpdate(msg) {
-  if (!msg.payload) return false;
-  if (Array.isArray(msg.payload)) {
-    return msg.payload.some((item) => item.messageType === "Variable");
-  }
-  return msg.payload.messageType === "Variable";
+  return Array.isArray(msg.items) && msg.items.length > 0
+    && msg.items.some((item) => item.value !== undefined);
+}
+
+/**
+ * Derive the node name (identifier) from a full nodeId string.
+ */
+function deriveNodeName(nodeId) {
+  if (!nodeId) return "";
+  const sMatch = nodeId.match(/s=([^;]+)/);
+  if (sMatch) return sMatch[1];
+  const iMatch = nodeId.match(/i=(\d+)/);
+  if (iMatch) return iMatch[1];
+  return nodeId;
+}
+
+/**
+ * Derive a storage key ("ns:name") from a full nodeId string.
+ */
+function deriveVariableKey(nodeId) {
+  const nsMatch = nodeId.match(/ns=(\d+)/);
+  const sMatch = nodeId.match(/s=([^;]+)/);
+  const iMatch = nodeId.match(/i=(\d+)/);
+  const ns = nsMatch ? nsMatch[1] : "1";
+  const name = sMatch ? sMatch[1] : (iMatch ? iMatch[1] : nodeId);
+  return `${ns}:${name}`;
+}
+
+/**
+ * Resolve the namespace to use for creating a node with the given nodeId.
+ * Falls back to getOwnNamespace() when no namespace index is specified.
+ */
+function resolveNamespace(addressSpace, nodeId) {
+  if (!nodeId) return addressSpace.getOwnNamespace();
+  const nsMatch = String(nodeId).match(/ns=(\d+)/);
+  if (!nsMatch) return addressSpace.getOwnNamespace();
+  const nsIndex = parseInt(nsMatch[1], 10);
+  const nsArray = addressSpace.getNamespaceArray();
+  if (nsIndex >= 0 && nsIndex < nsArray.length) return nsArray[nsIndex];
+  return addressSpace.getOwnNamespace();
 }

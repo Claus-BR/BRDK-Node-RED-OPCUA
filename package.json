@@ -27,7 +27,8 @@
       "opcua-method": "src/nodes/opcua-method.js",
       "opcua-discovery": "src/nodes/opcua-discovery.js",
       "opcua-rights": "src/nodes/opcua-rights.js",
-      "opcua-server": "src/nodes/opcua-server.js"
+      "opcua-server": "src/nodes/opcua-server.js",
+      "opcua-command": "src/nodes/opcua-command.js"
     }
   },
   "dependencies": {
