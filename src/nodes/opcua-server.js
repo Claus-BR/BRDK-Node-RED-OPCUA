@@ -35,6 +35,7 @@ const opcua = require("node-opcua");
 const { ObjectIds } = require("node-opcua-constants");
 const { installFileType } = require("node-opcua-file-transfer");
 const { NodeCrawler } = require("node-opcua-client-crawler");
+const { Subscription } = require("node-opcua-server");
 const path = require("path");
 const os = require("os");
 const fs = require("fs");
@@ -94,11 +95,30 @@ module.exports = function (RED) {
     this.maxNodesPerHistoryUpdateEvents              = Number(config.maxNodesPerHistoryUpdateEvents) || 0;
     this.maxNodesPerTranslateBrowsePathsToNodeIds    = Number(config.maxNodesPerTranslateBrowsePathsToNodeIds) || 0;
 
+    // Server capabilities
+    this.minSupportedSampleRate        = Number(config.minSupportedSampleRate) || 0;
+    this.maxBrowseContinuationPoints   = Number(config.maxBrowseContinuationPoints) || 0;
+    this.maxHistoryContinuationPoints  = Number(config.maxHistoryContinuationPoints) || 0;
+    this.maxQueryContinuationPoints    = Number(config.maxQueryContinuationPoints) || 0;
+
+    // Subscription settings
+    this.maxSubscriptions              = Number(config.maxSubscriptions) || 0;
+    this.maxMonitoredItems             = Number(config.maxMonitoredItems) || 0;
+    this.maxMonitoredItemsPerSubscription = Number(config.maxMonitoredItemsPerSubscription) || 0;
+    this.maxMonitoredItemsQueueSize    = Number(config.maxMonitoredItemsQueueSize) || 0;
+    this.minPublishingInterval          = Number(config.minPublishingInterval) || 0;
+    this.maxPublishingInterval          = Number(config.maxPublishingInterval) || 0;
+    this.defaultPublishingInterval      = Number(config.defaultPublishingInterval) || 0;
+    this.maxNotificationPerPublish      = Number(config.maxNotificationPerPublish) || 0;
+    this.minLifetimeDuration            = Number(config.minLifetimeDuration) || 0;
+    this.maxLifetimeDuration            = Number(config.maxLifetimeDuration) || 0;
+
     // Transport settings
-    this.maxConnectionsPerEndpoint = Number(config.maxConnectionsPerEndpoint) || 20;
-    this.maxMessageSize            = Number(config.maxMessageSize) || 4096;
-    this.maxBufferSize             = Number(config.maxBufferSize) || 4096;
-    this.maxSessions               = Math.max(Number(config.maxSessions) || 20, 10);
+    this.maxConnectionsPerEndpoint  = Number(config.maxConnectionsPerEndpoint) || 20;
+    this.maxMessageSize             = Number(config.maxMessageSize) || 4096;
+    this.maxBufferSize              = Number(config.maxBufferSize) || 4096;
+    this.defaultSecureTokenLifetime = Number(config.defaultSecureTokenLifetime) || 0;
+    this.maxSessions                = Math.max(Number(config.maxSessions) || 20, 10);
     this.maxSubscriptionsPerSession = Number(config.maxSubscriptionsPerSession) || 50;
 
     // ── Internal state ─────────────────────────────────────────────────
@@ -199,6 +219,33 @@ module.exports = function (RED) {
     //  SERVER LIFECYCLE
     // ═══════════════════════════════════════════════════════════════════
 
+    /**
+     * Temporarily apply this node's subscription config to the shared
+     * Subscription class statics, execute fn, then restore the originals.
+     * Safe because Node.js is single-threaded (no concurrent interleaving).
+     */
+    function applySubscriptionStatics(fn) {
+      const saved = {
+        minimumPublishingInterval: Subscription.minimumPublishingInterval,
+        maximumPublishingInterval: Subscription.maximumPublishingInterval,
+        defaultPublishingInterval: Subscription.defaultPublishingInterval,
+        maxNotificationPerPublishHighLimit: Subscription.maxNotificationPerPublishHighLimit,
+        minimumLifetimeDuration: Subscription.minimumLifetimeDuration,
+        maximumLifetimeDuration: Subscription.maximumLifetimeDuration,
+      };
+      if (node.minPublishingInterval > 0) Subscription.minimumPublishingInterval = node.minPublishingInterval;
+      if (node.maxPublishingInterval > 0) Subscription.maximumPublishingInterval = node.maxPublishingInterval;
+      if (node.defaultPublishingInterval > 0) Subscription.defaultPublishingInterval = node.defaultPublishingInterval;
+      if (node.maxNotificationPerPublish > 0) Subscription.maxNotificationPerPublishHighLimit = node.maxNotificationPerPublish;
+      if (node.minLifetimeDuration > 0) Subscription.minimumLifetimeDuration = node.minLifetimeDuration;
+      if (node.maxLifetimeDuration > 0) Subscription.maximumLifetimeDuration = node.maxLifetimeDuration;
+      try {
+        return fn();
+      } finally {
+        Object.assign(Subscription, saved);
+      }
+    }
+
     async function startServer() {
       try {
         setNodeStatus("connecting");
@@ -246,9 +293,13 @@ module.exports = function (RED) {
           securityModes,
           securityPolicies,
           maxConnectionsPerEndpoint: node.maxConnectionsPerEndpoint,
-          maxSessions: node.maxSessions,
-          maxSubscriptionsPerSession: node.maxSubscriptionsPerSession,
           timeout: node.sessionTimeout,
+          defaultSecureTokenLifetime: node.defaultSecureTokenLifetime || undefined,
+          transportSettings: {
+            maxMessageSize: node.maxMessageSize,
+            receiveBufferSize: node.maxBufferSize,
+            sendBufferSize: node.maxBufferSize,
+          },
           serverInfo: {
             applicationUri: opcua.makeApplicationUrn(hostname, "BRDK-NodeRED-OPCUA-Server"),
             productUri: "BRDK-NodeRED-OPCUA-Server",
@@ -258,9 +309,7 @@ module.exports = function (RED) {
             buildNumber: "1.0.0",
             buildDate: new Date(),
           },
-          serverCapabilities: {
-            operationLimits: buildOperationLimits(node),
-          },
+          serverCapabilities: buildServerCapabilities(node),
           userManager: {
             isValidUser: (username, password) => isValidUser(username, password),
             getUserRoles: (username) => getUserRoles(username),
@@ -280,6 +329,21 @@ module.exports = function (RED) {
         if (node.constructDefaultAddressSpace) {
           constructDefaultAddressSpace();
         }
+
+        // Wrap subscription creation to apply per-server static limits
+        // (Subscription statics are shared across all server nodes in this process,
+        //  so we set/restore them around each creation and modification call)
+        const engine = node.server.engine;
+        const originalCreateSub = engine._createSubscriptionOnSession.bind(engine);
+        engine._createSubscriptionOnSession = function (session, request) {
+          const sub = applySubscriptionStatics(() => originalCreateSub(session, request));
+          // Also wrap modify so subscription modifications use this server's limits
+          const originalModify = sub.modify.bind(sub);
+          sub.modify = function (params) {
+            return applySubscriptionStatics(() => originalModify(params));
+          };
+          return sub;
+        };
 
         await node.server.start();
         node.initialized = true;
@@ -1552,6 +1616,36 @@ function buildOperationLimits(node) {
   }
 
   return limits;
+}
+
+/**
+ * Build server capabilities from node config.
+ * Only includes values that are explicitly set (non-zero) to let
+ * the node-opcua library defaults apply for unset properties.
+ */
+function buildServerCapabilities(node) {
+  const capabilities = {
+    operationLimits: buildOperationLimits(node),
+    maxSessions: node.maxSessions,
+    maxSubscriptionsPerSession: node.maxSubscriptionsPerSession,
+  };
+
+  const optionalFields = [
+    "minSupportedSampleRate",
+    "maxSubscriptions",
+    "maxMonitoredItems",
+    "maxMonitoredItemsPerSubscription",
+    "maxMonitoredItemsQueueSize",
+    "maxBrowseContinuationPoints",
+    "maxHistoryContinuationPoints",
+    "maxQueryContinuationPoints",
+  ];
+
+  for (const field of optionalFields) {
+    if (node[field] > 0) capabilities[field] = node[field];
+  }
+
+  return capabilities;
 }
 
 /**

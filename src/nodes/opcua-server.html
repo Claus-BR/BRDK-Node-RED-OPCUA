@@ -46,8 +46,25 @@
       maxConnectionsPerEndpoint: { value: 20, validate: RED.validators.number() },
       maxMessageSize:            { value: 4096, validate: RED.validators.number() },
       maxBufferSize:             { value: 4096, validate: RED.validators.number() },
+      defaultSecureTokenLifetime: { value: 0, validate: RED.validators.number() },
+      // Server capacity
       maxSessions:               { value: 20, validate: RED.validators.number() },
       maxSubscriptionsPerSession: { value: 50, validate: RED.validators.number() },
+      minSupportedSampleRate:        { value: 0, validate: RED.validators.number() },
+      maxBrowseContinuationPoints:   { value: 0, validate: RED.validators.number() },
+      maxHistoryContinuationPoints:  { value: 0, validate: RED.validators.number() },
+      maxQueryContinuationPoints:    { value: 0, validate: RED.validators.number() },
+      // Subscription settings
+      maxSubscriptions:              { value: 0, validate: RED.validators.number() },
+      maxMonitoredItems:             { value: 0, validate: RED.validators.number() },
+      maxMonitoredItemsPerSubscription: { value: 0, validate: RED.validators.number() },
+      maxMonitoredItemsQueueSize:    { value: 0, validate: RED.validators.number() },
+      minPublishingInterval:           { value: 0, validate: RED.validators.number() },
+      maxPublishingInterval:           { value: 0, validate: RED.validators.number() },
+      defaultPublishingInterval:       { value: 0, validate: RED.validators.number() },
+      maxNotificationPerPublish:       { value: 0, validate: RED.validators.number() },
+      minLifetimeDuration:             { value: 0, validate: RED.validators.number() },
+      maxLifetimeDuration:             { value: 0, validate: RED.validators.number() },
     },
     inputs: 1,
     outputs: 2,
@@ -72,6 +89,7 @@
       tabs.addTab({ id: "opcua-server-tab-security", label: "Security" });
       tabs.addTab({ id: "opcua-server-tab-limits", label: "Limits" });
       tabs.addTab({ id: "opcua-server-tab-transport", label: "Transport" });
+      tabs.addTab({ id: "opcua-server-tab-subscriptions", label: "Subscriptions" });
     },
   });
 </script>
@@ -200,54 +218,84 @@
 
     <!-- ── Limits Tab ──────────────────────────────────────────── -->
     <div id="opcua-server-tab-limits" style="display:none;">
-      <p style="margin-bottom: 10px; color: #888;">Set to 0 for unlimited (server default).</p>
+      <p style="margin-bottom: 10px; color: #888;">Set to 0 to use the library default.</p>
+
+      <h4 style="margin-bottom: 8px;">Server Capacity</h4>
+      <div class="form-row">
+        <label for="node-input-maxSessions">Max Sessions</label>
+        <input type="number" id="node-input-maxSessions" min="10" placeholder="20" title="Maximum concurrent client sessions">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxSubscriptionsPerSession">Subscriptions / Session</label>
+        <input type="number" id="node-input-maxSubscriptionsPerSession" min="1" placeholder="50" title="Maximum subscriptions per client session">
+      </div>
+      <div class="form-row">
+        <label for="node-input-minSupportedSampleRate">Min Sample Rate (ms)</label>
+        <input type="number" id="node-input-minSupportedSampleRate" min="0" placeholder="0" title="Fastest monitored item sampling interval">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxBrowseContinuationPoints">Browse Continuations</label>
+        <input type="number" id="node-input-maxBrowseContinuationPoints" min="0" placeholder="0" title="Max concurrent browse paging tokens">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxHistoryContinuationPoints">History Continuations</label>
+        <input type="number" id="node-input-maxHistoryContinuationPoints" min="0" placeholder="0" title="Max concurrent history paging tokens">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxQueryContinuationPoints">Query Continuations</label>
+        <input type="number" id="node-input-maxQueryContinuationPoints" min="0" placeholder="0" title="Max concurrent query paging tokens">
+      </div>
+
+      <hr>
+
+      <h4 style="margin-bottom: 8px;">Operation Limits <span style="color:#888; font-weight:normal;">(max nodes per call)</span></h4>
       <div class="form-row">
         <label for="node-input-maxNodesPerBrowse">Browse</label>
-        <input type="number" id="node-input-maxNodesPerBrowse" min="0">
+        <input type="number" id="node-input-maxNodesPerBrowse" min="0" placeholder="0">
       </div>
       <div class="form-row">
         <label for="node-input-maxNodesPerRead">Read</label>
-        <input type="number" id="node-input-maxNodesPerRead" min="0">
+        <input type="number" id="node-input-maxNodesPerRead" min="0" placeholder="0">
       </div>
       <div class="form-row">
         <label for="node-input-maxNodesPerWrite">Write</label>
-        <input type="number" id="node-input-maxNodesPerWrite" min="0">
+        <input type="number" id="node-input-maxNodesPerWrite" min="0" placeholder="0">
       </div>
       <div class="form-row">
         <label for="node-input-maxNodesPerMethodCall">Method Call</label>
-        <input type="number" id="node-input-maxNodesPerMethodCall" min="0">
+        <input type="number" id="node-input-maxNodesPerMethodCall" min="0" placeholder="0">
       </div>
       <div class="form-row">
-        <label for="node-input-maxMonitoredItemsPerCall">Monitored Items</label>
-        <input type="number" id="node-input-maxMonitoredItemsPerCall" min="0">
+        <label for="node-input-maxMonitoredItemsPerCall">Create Monitored Items</label>
+        <input type="number" id="node-input-maxMonitoredItemsPerCall" min="0" placeholder="0">
       </div>
       <div class="form-row">
         <label for="node-input-maxNodesPerRegisterNodes">Register Nodes</label>
-        <input type="number" id="node-input-maxNodesPerRegisterNodes" min="0">
+        <input type="number" id="node-input-maxNodesPerRegisterNodes" min="0" placeholder="0">
       </div>
       <div class="form-row">
         <label for="node-input-maxNodesPerNodeManagement">Node Management</label>
-        <input type="number" id="node-input-maxNodesPerNodeManagement" min="0">
+        <input type="number" id="node-input-maxNodesPerNodeManagement" min="0" placeholder="0">
       </div>
       <div class="form-row">
-        <label for="node-input-maxNodesPerHistoryReadData">History Read</label>
-        <input type="number" id="node-input-maxNodesPerHistoryReadData" min="0">
+        <label for="node-input-maxNodesPerHistoryReadData">History Read Data</label>
+        <input type="number" id="node-input-maxNodesPerHistoryReadData" min="0" placeholder="0">
       </div>
       <div class="form-row">
-        <label for="node-input-maxNodesPerHistoryReadEvents">History Events</label>
-        <input type="number" id="node-input-maxNodesPerHistoryReadEvents" min="0">
+        <label for="node-input-maxNodesPerHistoryReadEvents">History Read Events</label>
+        <input type="number" id="node-input-maxNodesPerHistoryReadEvents" min="0" placeholder="0">
       </div>
       <div class="form-row">
-        <label for="node-input-maxNodesPerHistoryUpdateData">History Update</label>
-        <input type="number" id="node-input-maxNodesPerHistoryUpdateData" min="0">
+        <label for="node-input-maxNodesPerHistoryUpdateData">History Update Data</label>
+        <input type="number" id="node-input-maxNodesPerHistoryUpdateData" min="0" placeholder="0">
       </div>
       <div class="form-row">
         <label for="node-input-maxNodesPerHistoryUpdateEvents">History Update Events</label>
-        <input type="number" id="node-input-maxNodesPerHistoryUpdateEvents" min="0">
+        <input type="number" id="node-input-maxNodesPerHistoryUpdateEvents" min="0" placeholder="0">
       </div>
       <div class="form-row">
-        <label for="node-input-maxNodesPerTranslateBrowsePathsToNodeIds">Translate</label>
-        <input type="number" id="node-input-maxNodesPerTranslateBrowsePathsToNodeIds" min="0">
+        <label for="node-input-maxNodesPerTranslateBrowsePathsToNodeIds">Translate Browse Paths</label>
+        <input type="number" id="node-input-maxNodesPerTranslateBrowsePathsToNodeIds" min="0" placeholder="0">
       </div>
     </div>
 
@@ -255,23 +303,74 @@
     <div id="opcua-server-tab-transport" style="display:none;">
       <div class="form-row">
         <label for="node-input-maxConnectionsPerEndpoint">Connections / Endpoint</label>
-        <input type="number" id="node-input-maxConnectionsPerEndpoint" min="1">
+        <input type="number" id="node-input-maxConnectionsPerEndpoint" min="1" placeholder="20" title="Max concurrent TCP connections per endpoint">
       </div>
       <div class="form-row">
-        <label for="node-input-maxMessageSize">Max Message Size</label>
-        <input type="number" id="node-input-maxMessageSize" min="1024">
+        <label for="node-input-maxMessageSize">Message Size (bytes)</label>
+        <input type="number" id="node-input-maxMessageSize" min="1024" placeholder="4096" title="Max bytes per OPC UA message chunk">
       </div>
       <div class="form-row">
-        <label for="node-input-maxBufferSize">Max Buffer Size</label>
-        <input type="number" id="node-input-maxBufferSize" min="1024">
+        <label for="node-input-maxBufferSize">Buffer Size (bytes)</label>
+        <input type="number" id="node-input-maxBufferSize" min="1024" placeholder="4096" title="Send/receive buffer size in bytes">
       </div>
       <div class="form-row">
-        <label for="node-input-maxSessions">Max Sessions</label>
-        <input type="number" id="node-input-maxSessions" min="10">
+        <label for="node-input-defaultSecureTokenLifetime">Token Lifetime (ms)</label>
+        <input type="number" id="node-input-defaultSecureTokenLifetime" min="0" placeholder="0" title="Secure channel token renewal interval (0 = library default)">
+      </div>
+    </div>
+
+    <!-- ── Subscriptions Tab ───────────────────────────────────── -->
+    <div id="opcua-server-tab-subscriptions" style="display:none;">
+      <p style="margin-bottom: 10px; color: #888;">Subscription and monitoring limits. Set to 0 to use the library default.</p>
+
+      <h4 style="margin-bottom: 8px;">Capacity</h4>
+      <div class="form-row">
+        <label for="node-input-maxSubscriptions">Total Subscriptions</label>
+        <input type="number" id="node-input-maxSubscriptions" min="0" placeholder="0" title="Total subscriptions across all sessions on this server">
       </div>
       <div class="form-row">
-        <label for="node-input-maxSubscriptionsPerSession">Subscriptions / Session</label>
-        <input type="number" id="node-input-maxSubscriptionsPerSession" min="1">
+        <label for="node-input-maxMonitoredItems">Total Monitored Items</label>
+        <input type="number" id="node-input-maxMonitoredItems" min="0" placeholder="0" title="Total monitored items across all subscriptions">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxMonitoredItemsPerSubscription">Monitored Items / Sub</label>
+        <input type="number" id="node-input-maxMonitoredItemsPerSubscription" min="0" placeholder="0" title="Max monitored items per individual subscription">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxMonitoredItemsQueueSize">Item Queue Size</label>
+        <input type="number" id="node-input-maxMonitoredItemsQueueSize" min="0" placeholder="0" title="Notification buffer size per monitored item">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxNotificationPerPublish">Notifications / Publish</label>
+        <input type="number" id="node-input-maxNotificationPerPublish" min="0" placeholder="1000" title="Max notifications sent per publish cycle">
+      </div>
+
+      <hr>
+
+      <h4 style="margin-bottom: 8px;">Publishing Interval</h4>
+      <div class="form-row">
+        <label for="node-input-minPublishingInterval">Minimum (ms)</label>
+        <input type="number" id="node-input-minPublishingInterval" min="0" placeholder="50" title="Fastest allowed publish interval">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxPublishingInterval">Maximum (ms)</label>
+        <input type="number" id="node-input-maxPublishingInterval" min="0" placeholder="0" title="Slowest allowed publish interval">
+      </div>
+      <div class="form-row">
+        <label for="node-input-defaultPublishingInterval">Default (ms)</label>
+        <input type="number" id="node-input-defaultPublishingInterval" min="0" placeholder="1000" title="Used when client requests 0">
+      </div>
+
+      <hr>
+
+      <h4 style="margin-bottom: 8px;">Subscription Lifetime</h4>
+      <div class="form-row">
+        <label for="node-input-minLifetimeDuration">Minimum (ms)</label>
+        <input type="number" id="node-input-minLifetimeDuration" min="0" placeholder="0" title="Shortest time before subscription expires without publish">
+      </div>
+      <div class="form-row">
+        <label for="node-input-maxLifetimeDuration">Maximum (ms)</label>
+        <input type="number" id="node-input-maxLifetimeDuration" min="0" placeholder="0" title="Longest time before subscription expires without publish">
       </div>
     </div>
   </div>
