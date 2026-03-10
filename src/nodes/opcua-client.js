@@ -45,6 +45,7 @@
 
 const opcua = require("node-opcua");
 const { ClientFile } = require("node-opcua-file-transfer");
+const { getExtraDataTypeManager, DataTypeExtractStrategy } = require("node-opcua-client-dynamic-extension-object");
 const { readFileSync } = require("fs");
 
 const { getClientCertificateManager } = require("../lib/opcua-certificate-manager");
@@ -215,6 +216,14 @@ module.exports = function (RED) {
 
       const userIdentity = resolveUserIdentity(node.endpointNode);
       node.session = await node.client.createSession(userIdentity);
+
+      // Pre-load server type dictionaries so ExtensionObjects decode correctly
+      try {
+        setStatus("extracting datatypes");
+        node.extraDataTypeManager = await getExtraDataTypeManager(node.session, DataTypeExtractStrategy.Both);
+      } catch (err) {
+        node.warn(`Failed to load type dictionaries: ${err.message}`);
+      }
 
       setStatus("session active");
 

@@ -44,16 +44,16 @@ A modern, clean Node-RED OPC UA library for interacting with OPC UA servers and 
  ┌──────────────── Client Flow ────────────────────────┐
  │                                                     │
  │   [inject] → [Item / Smart Item] → [Action]         │
- │                                       ↓              │
- │                  [Endpoint] ──→ [OPC UA Client]      │
+ │                                       ↓             │
+ │                  [Endpoint] ──→ [OPC UA Client]     │
  │                                    ↓   ↓   ↓        │
- │                               data  status  batch    │
+ │                               data  status  batch   │
  │                                                     │
  ├──────────────── Server Flow ────────────────────────┤
  │                                                     │
  │   [inject] → [Rights] → [Command] → [OPC UA Server] │
  │                                        ↓   ↓        │
- │                                    session  status   │
+ │                                    session  status  │
  │                                                     │
  └─────────────────────────────────────────────────────┘
 ```
@@ -63,27 +63,37 @@ A modern, clean Node-RED OPC UA library for interacting with OPC UA servers and 
 ## Todo
 
 ### OPC UA Client
-
+- [] Testing
+- [] JSON Serilazation of outputs.
 
 ### OPC UA Server
+- [] Testing
 
+### OPC UA Item
+- [x] Works like intended 
 
 ### OPC UA Smart Item
+- [] Automatic value type from browse
 
 
 ### OPC UA Endpoint
-
+- [x] Works like intended
 
 ### OPC UA Event
-
+- [] Testing
+- [] Alignment with `.items` data structure 
 
 ### OPC UA Method
-
+- [] Testing
+- [] Alignment with `.items` data structure 
 
 ### OPC UA Discovery
-
+- [] Testing
+- may be removed depending on the demand of this function
 
 ### General
+- [] Unit and feautre testing
+- 
 
 
 ---

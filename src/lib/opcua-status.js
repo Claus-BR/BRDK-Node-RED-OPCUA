@@ -34,7 +34,7 @@ const STATUS_MAP = {
   "connecting":         { fill: "yellow", shape: "dot",  text: "connecting" },
   "reconnecting":       { fill: "yellow", shape: "dot",  text: "reconnecting" },
   "closing":            { fill: "yellow", shape: "dot",  text: "closing" },
-
+  "extracting datatypes": { fill: "yellow", shape: "dot",  text: "extracting datatypes" },
   // ── Active operations ────────────────────────────────────────────────────
   "reading":            { fill: "green",  shape: "dot",  text: "reading" },
   "read done":          { fill: "green",  shape: "dot",  text: "read done" },
