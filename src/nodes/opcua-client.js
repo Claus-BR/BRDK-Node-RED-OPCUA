@@ -74,8 +74,6 @@ module.exports = function (RED) {
     this.action         = config.action || "read";
     this.deadbandType   = config.deadbandtype || "a";
     this.deadbandValue  = Number(config.deadbandvalue) || 1;
-    this.time           = Number(config.time) || 10;
-    this.timeUnit       = config.timeUnit || "s";
     this.name           = config.name || "";
 
     // Transport settings
@@ -93,11 +91,14 @@ module.exports = function (RED) {
     this.applicationName = config.applicationName || "BRDK-NodeRED-OPCUA-Client";
     this.applicationUri  = config.applicationUri || "";
 
+    // Subscription config node (used when client's built-in action is subscription-related)
+    this.subscriptionNode = RED.nodes.getNode(config.subscription);
+
     // ── Internal state ─────────────────────────────────────────────────
     this.client       = null;          // OPCUAClient instance
     this.session      = null;          // ClientSession instance
-    this.subscription = null;          // ClientSubscription instance
-    this.monitoredItems = new Map();   // nodeId → ClientMonitoredItem
+    this.subscriptions  = new Map();   // subscriptionId → ClientSubscription
+    this.monitoredItems = new Map();   // nodeId → { monitoredItem, subscriptionId }
     this.cmdQueue       = [];          // Messages queued while connecting
     this.currentStatus  = "";
     this.hasConnected   = false;
@@ -236,7 +237,7 @@ module.exports = function (RED) {
         if (!node.isClosing) {
           setStatus("session closed");
           node.session = null;
-          node.subscription = null;
+          node.subscriptions.clear();
           node.monitoredItems.clear();
         }
       });
@@ -282,7 +283,7 @@ module.exports = function (RED) {
         // session timeout window, the server closed the session.
         // Don't reconnect — go idle and let the next message re-connect.
         const idleMs = Date.now() - node.lastActivity;
-        if (!node.subscription && idleMs >= SESSION_TIMEOUT_MS - WINDOW && idleMs <= SESSION_TIMEOUT_MS + WINDOW) {
+        if (idleMs >= SESSION_TIMEOUT_MS - WINDOW && idleMs <= SESSION_TIMEOUT_MS + WINDOW) {
           closeSession()
             .then(() => disconnectClient())
             .then(() => setStatusWithDetail("timed out", "idle too long, connection closed by server"));
@@ -312,6 +313,13 @@ module.exports = function (RED) {
      * Route a message to the correct action handler.
      */
     function routeAction(action, msg, send, done) {
+       // Inject subscriptionId for subscription-related actions when not already set
+      if (["subscribe", "monitor", "events", "unsubscribe", "deletesubscription"].includes(action)) {
+        if (!msg.subscriptionId && node.subscriptionNode) {
+          msg.subscriptionId = node.subscriptionNode.id;
+        }
+      }
+      
       const handlers = {
         read:                () => actionRead(msg, send, done),
         write:               () => actionWrite(msg, send, done),
@@ -477,17 +485,18 @@ module.exports = function (RED) {
           return;
         }
 
-        await ensureSubscription(msg);
+        const subscription = ensureSubscription(msg);
         setStatus("subscribing");
 
-        const samplingInterval = msg.interval || converter.toMilliseconds(node.time, node.timeUnit);
-        const queueSize = msg.queueSize || 10;
+        const samplingInterval = resolveSamplingInterval(msg);
+        const queueSize = resolveQueueSize(msg);
+        const subConfigId = msg.subscriptionId;
 
         if (items.length === 1) {
           // Single item — individual monitored item
           const item = items[0];
           const monitoredItem = opcua.ClientMonitoredItem.create(
-            node.subscription,
+            subscription,
             { nodeId: item.nodeId, attributeId: opcua.AttributeIds.Value },
             { samplingInterval, discardOldest: true, queueSize },
             opcua.TimestampsToReturn.Both
@@ -513,10 +522,10 @@ module.exports = function (RED) {
             node.error(`Monitored item error: ${errStr}`, msg);
           });
 
-          node.monitoredItems.set(item.nodeId, monitoredItem);
+          node.monitoredItems.set(item.nodeId, { monitoredItem, subscriptionId: subConfigId });
         } else {
           // Multiple items — monitored item group
-          await subscribeMultipleItems(items, msg, send);
+          await subscribeMultipleItems(items, msg, send, subscription, subConfigId);
         }
 
         setStatus("subscribed");
@@ -542,11 +551,12 @@ module.exports = function (RED) {
           return;
         }
 
-        await ensureSubscription(msg);
+        const subscription = ensureSubscription(msg);
         setStatus("monitoring");
 
-        const samplingInterval = msg.interval || converter.toMilliseconds(node.time, node.timeUnit);
-        const queueSize = msg.queueSize || 10;
+        const samplingInterval = resolveSamplingInterval(msg);
+        const queueSize = resolveQueueSize(msg);
+        const subConfigId = msg.subscriptionId;
 
         // Resolve deadband settings (msg overrides node config)
         const dbType = msg.deadbandType || node.deadbandType;
@@ -557,7 +567,7 @@ module.exports = function (RED) {
 
         for (const item of items) {
           const monitoredItem = opcua.ClientMonitoredItem.create(
-            node.subscription,
+            subscription,
             { nodeId: item.nodeId, attributeId: opcua.AttributeIds.Value },
             {
               samplingInterval,
@@ -590,7 +600,7 @@ module.exports = function (RED) {
             node.error(`Monitored item error: ${errStr}`, msg);
           });
 
-          node.monitoredItems.set(item.nodeId, monitoredItem);
+          node.monitoredItems.set(item.nodeId, { monitoredItem, subscriptionId: subConfigId });
         }
 
         setStatus("monitoring");
@@ -607,10 +617,10 @@ module.exports = function (RED) {
       const items = msg.items || [];
 
       for (const item of items) {
-        const monitoredItem = node.monitoredItems.get(item.nodeId);
-        if (monitoredItem) {
+        const entry = node.monitoredItems.get(item.nodeId);
+        if (entry) {
           try {
-            await monitoredItem.terminate();
+            await entry.monitoredItem.terminate();
             node.monitoredItems.delete(item.nodeId);
           } catch (err) {
             node.warn(`Unsubscribe error for ${item.nodeId}: ${err.message}`);
@@ -629,7 +639,13 @@ module.exports = function (RED) {
      */
     async function actionDeleteSubscription(msg, send, done) {
       try {
-        await terminateSubscription();
+        if (msg.subscriptionId) {
+          // Terminate a specific subscription
+          await terminateSubscription(msg.subscriptionId);
+        } else {
+          // No specific subscription — terminate all
+          await terminateSubscription();
+        }
         msg.payload = "Subscription deleted";
         setStatus("session active");
         send([msg, null, null]);
@@ -860,8 +876,9 @@ module.exports = function (RED) {
       if (!assertSession(msg, done)) return;
 
       try {
-        await ensureSubscription(msg, true);
+        const subscription = ensureSubscription(msg);
         setStatus("subscribing");
+        const subConfigId = msg.subscriptionId;
 
         // Build event filter fields
         const baseFields = [
@@ -876,7 +893,7 @@ module.exports = function (RED) {
         const eventTypeIds = msg.eventTypeIds || "i=2041"; // Default: BaseEvent
 
         const monitoredItem = opcua.ClientMonitoredItem.create(
-          node.subscription,
+          subscription,
           {
             nodeId: opcua.resolveNodeId(eventNodeId),
             attributeId: opcua.AttributeIds.EventNotifier,
@@ -910,7 +927,7 @@ module.exports = function (RED) {
           node.error(`Event monitor error: ${errStr}`, msg);
         });
 
-        node.monitoredItems.set(`event:${eventNodeId}`, monitoredItem);
+        node.monitoredItems.set(`event:${eventNodeId}`, { monitoredItem, subscriptionId: subConfigId });
         setStatus("subscribed");
         done();
       } catch (err) {
@@ -1332,39 +1349,82 @@ module.exports = function (RED) {
     // ═══════════════════════════════════════════════════════════════════
 
     /**
-     * Ensure a subscription exists (create one if it doesn't).
+     * Ensure a subscription exists for the given subscription config.
      *
-     * @param {object}  msg          - The incoming message.
-     * @param {boolean} [forEvents]  - Use event-optimized parameters.
+     * Uses `msg.subscriptionId` to look up an `opcua-subscription` config node.
+     *
+     * @param {object}  msg - The incoming message (must have msg.subscriptionId).
+     * @returns {opcua.ClientSubscription} The resolved subscription.
      */
-    async function ensureSubscription(msg, forEvents = false) {
-      if (node.subscription) return;
+    function ensureSubscription(msg) {
+      const subConfigId = msg.subscriptionId;
+      if (!subConfigId) {
+        throw new Error("No subscription configured. Select a Subscription config node.");
+      }
 
-      const interval = msg.interval || converter.toMilliseconds(node.time, node.timeUnit);
-      const params = forEvents
-        ? converter.buildEventSubscriptionParameters(interval)
-        : converter.buildSubscriptionParameters(interval);
+      const existing = node.subscriptions.get(subConfigId);
+      if (existing) return existing;
 
-      node.subscription = opcua.ClientSubscription.create(node.session, params);
+      const subConfigNode = RED.nodes.getNode(subConfigId);
+      if (!subConfigNode) {
+        throw new Error(`Subscription config node "${subConfigId}" not found.`);
+      }
 
-      node.subscription.on("started", () => {
+      const params = {
+        requestedPublishingInterval: subConfigNode.publishingInterval,
+        requestedLifetimeCount: subConfigNode.lifetimeCount,
+        requestedMaxKeepAliveCount: subConfigNode.maxKeepAliveCount,
+        maxNotificationsPerPublish: subConfigNode.maxNotificationsPerPublish,
+        publishingEnabled: true,
+        priority: subConfigNode.priority,
+      };
+
+      const subscription = opcua.ClientSubscription.create(node.session, params);
+
+      subscription.on("started", () => {
         // Status is set by the calling action (subscribe/monitor/events)
       });
 
-      node.subscription.on("keepalive", () => {
+      subscription.on("keepalive", () => {
         setStatus("keepalive");
       });
 
-      node.subscription.on("terminated", () => {
-        setStatus("terminated");
-        node.subscription = null;
-        node.monitoredItems.clear();
+      subscription.on("terminated", () => {
+        node.subscriptions.delete(subConfigId);
+        // Remove monitored items belonging to this subscription
+        for (const [nodeId, entry] of node.monitoredItems) {
+          if (entry.subscriptionId === subConfigId) {
+            node.monitoredItems.delete(nodeId);
+          }
+        }
+        if (node.subscriptions.size === 0) {
+          setStatus("terminated");
+        }
       });
 
-      node.subscription.on("error", (err) => {
+      subscription.on("error", (err) => {
         setStatus("subscription error");
         node.error(`Subscription error: ${err.message}`);
       });
+
+      node.subscriptions.set(subConfigId, subscription);
+      return subscription;
+    }
+
+    /**
+     * Get the sampling interval from the subscription config node.
+     */
+    function resolveSamplingInterval(msg) {
+      const subConfigNode = RED.nodes.getNode(msg.subscriptionId);
+      return subConfigNode?.samplingInterval || 1000;
+    }
+
+    /**
+     * Get the queue size from the subscription config node.
+     */
+    function resolveQueueSize(msg) {
+      const subConfigNode = RED.nodes.getNode(msg.subscriptionId);
+      return subConfigNode?.queueSize || 10;
     }
 
     /**
@@ -1374,8 +1434,9 @@ module.exports = function (RED) {
      * @param {object} msg  - The original incoming message.
      * @param {Function} send - The send function.
      */
-    async function subscribeMultipleItems(items, msg, send) {
-      const samplingInterval = msg.interval || converter.toMilliseconds(node.time, node.timeUnit);
+    async function subscribeMultipleItems(items, msg, send, subscription, subConfigId) {
+      const samplingInterval = resolveSamplingInterval(msg);
+      const queueSize = resolveQueueSize(msg);
 
       const itemsToMonitor = items.map((item) => ({
         nodeId: item.nodeId,
@@ -1383,9 +1444,9 @@ module.exports = function (RED) {
       }));
 
       const group = opcua.ClientMonitoredItemGroup.create(
-        node.subscription,
+        subscription,
         itemsToMonitor,
-        { samplingInterval, discardOldest: true, queueSize: 10 },
+        { samplingInterval, discardOldest: true, queueSize },
         opcua.TimestampsToReturn.Both
       );
 
@@ -1409,14 +1470,31 @@ module.exports = function (RED) {
     /**
      * Terminate the current subscription and all monitored items.
      */
-    async function terminateSubscription() {
-      if (node.subscription) {
-        try {
-          await node.subscription.terminate();
-        } catch {
-          // Subscription may already be terminated
+    /**
+     * Terminate subscription(s) and clean up monitored items.
+     *
+     * @param {string} [subConfigId] - If provided, terminate only that subscription.
+     *                                  If omitted, terminate all subscriptions.
+     */
+    async function terminateSubscription(subConfigId) {
+      if (subConfigId) {
+        // Terminate a specific subscription
+        const sub = node.subscriptions.get(subConfigId);
+        if (sub) {
+          try { await sub.terminate(); } catch { /* may already be terminated */ }
+          node.subscriptions.delete(subConfigId);
+          for (const [nodeId, entry] of node.monitoredItems) {
+            if (entry.subscriptionId === subConfigId) {
+              node.monitoredItems.delete(nodeId);
+            }
+          }
         }
-        node.subscription = null;
+      } else {
+        // Terminate all subscriptions
+        for (const [id, sub] of node.subscriptions) {
+          try { await sub.terminate(); } catch { /* may already be terminated */ }
+        }
+        node.subscriptions.clear();
         node.monitoredItems.clear();
       }
     }

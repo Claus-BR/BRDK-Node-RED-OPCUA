@@ -1,0 +1,170 @@
+<!--
+  @file opcua-subscription.html
+  @description Editor definition for the OPC UA Subscription configuration node.
+
+  This config node provides a UI for specifying subscription parameters:
+    - Publishing interval
+    - Sampling interval
+    - Queue size
+    - Advanced: lifetime count, max keep-alive count, max notifications, priority
+-->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     1. NODE REGISTRATION
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/javascript">
+  RED.nodes.registerType("opcua-subscription", {
+    category: "config",
+    defaults: {
+      name:                        { value: "" },
+      publishingTime:              { value: 1, required: true, validate: RED.validators.number() },
+      publishingTimeUnit:          { value: "s" },
+      samplingTime:                { value: 0, validate: RED.validators.number() },
+      samplingTimeUnit:            { value: "s" },
+      queueSize:                   { value: 10, validate: RED.validators.number() },
+      lifetimeCount:               { value: 60, validate: RED.validators.number() },
+      maxKeepAliveCount:           { value: 10, validate: RED.validators.number() },
+      maxNotificationsPerPublish:  { value: 10, validate: RED.validators.number() },
+      priority:                    { value: 10, validate: RED.validators.number() },
+    },
+    label: function () {
+      if (this.name) return this.name;
+      return this.publishingTime + (this.publishingTimeUnit || "s");
+    },
+
+    oneditprepare: function () {
+      // Toggle advanced settings visibility
+      var $toggle = $("#opcua-sub-advanced-toggle");
+      var $advanced = $(".opcua-sub-advanced-row");
+
+      $toggle.on("click", function (e) {
+        e.preventDefault();
+        $advanced.toggle();
+        var visible = $advanced.is(":visible");
+        $(this).text(visible ? "▾ Hide advanced settings" : "▸ Show advanced settings");
+      });
+
+      // Start collapsed
+      $advanced.hide();
+    },
+  });
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     2. EDIT TEMPLATE
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-template-name="opcua-subscription">
+
+  <!-- Name -->
+  <div class="form-row">
+    <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-config-input-name" placeholder="e.g. Fast Data, Slow Polling">
+  </div>
+
+  <!-- Publishing Interval -->
+  <div class="form-row">
+    <label for="node-config-input-publishingTime"><i class="fa fa-clock-o"></i> Publishing</label>
+    <input type="number" id="node-config-input-publishingTime" style="width: 80px;" min="1" placeholder="1">
+    <select id="node-config-input-publishingTimeUnit" style="width: 100px;">
+      <option value="ms">milliseconds</option>
+      <option value="s">seconds</option>
+      <option value="m">minutes</option>
+      <option value="h">hours</option>
+    </select>
+  </div>
+
+  <!-- Sampling Interval -->
+  <div class="form-row">
+    <label for="node-config-input-samplingTime"><i class="fa fa-tachometer"></i> Sampling</label>
+    <input type="number" id="node-config-input-samplingTime" style="width: 80px;" min="0" placeholder="0">
+    <select id="node-config-input-samplingTimeUnit" style="width: 100px;">
+      <option value="ms">milliseconds</option>
+      <option value="s">seconds</option>
+      <option value="m">minutes</option>
+      <option value="h">hours</option>
+    </select>
+    <div style="margin-left: 110px; font-size: 0.85em; color: #999;">0 = use publishing interval</div>
+  </div>
+
+  <!-- Queue Size -->
+  <div class="form-row">
+    <label for="node-config-input-queueSize"><i class="fa fa-list-ol"></i> Queue Size</label>
+    <input type="number" id="node-config-input-queueSize" style="width: 80px;" min="0" placeholder="10">
+  </div>
+
+  <!-- Advanced toggle -->
+  <div class="form-row">
+    <a href="#" id="opcua-sub-advanced-toggle" style="font-size: 0.9em;">▸ Show advanced settings</a>
+  </div>
+
+  <!-- Advanced: Lifetime Count -->
+  <div class="form-row opcua-sub-advanced-row" style="display: none;">
+    <label for="node-config-input-lifetimeCount"><i class="fa fa-hourglass"></i> Lifetime Count</label>
+    <input type="number" id="node-config-input-lifetimeCount" style="width: 80px;" min="1" placeholder="60">
+  </div>
+
+  <!-- Advanced: Max Keep-Alive Count -->
+  <div class="form-row opcua-sub-advanced-row" style="display: none;">
+    <label for="node-config-input-maxKeepAliveCount"><i class="fa fa-heartbeat"></i> Keep-Alive Count</label>
+    <input type="number" id="node-config-input-maxKeepAliveCount" style="width: 80px;" min="1" placeholder="10">
+  </div>
+
+  <!-- Advanced: Max Notifications Per Publish -->
+  <div class="form-row opcua-sub-advanced-row" style="display: none;">
+    <label for="node-config-input-maxNotificationsPerPublish"><i class="fa fa-bell"></i> Max Notifications</label>
+    <input type="number" id="node-config-input-maxNotificationsPerPublish" style="width: 80px;" min="0" placeholder="10">
+  </div>
+
+  <!-- Advanced: Priority -->
+  <div class="form-row opcua-sub-advanced-row" style="display: none;">
+    <label for="node-config-input-priority"><i class="fa fa-sort-amount-asc"></i> Priority</label>
+    <input type="number" id="node-config-input-priority" style="width: 80px;" min="0" max="255" placeholder="10">
+  </div>
+
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     3. HELP TEXT
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="text/html" data-help-name="opcua-subscription">
+  <p>Configuration node for OPC UA subscription parameters.</p>
+
+  <h3>Settings</h3>
+  <dl class="message-properties">
+    <dt>Publishing Interval <span class="property-type">time + unit</span></dt>
+    <dd>How often the server should send data changes to the client.
+    Lower values = faster updates but more network traffic.</dd>
+
+    <dt>Sampling Interval <span class="property-type">time + unit</span></dt>
+    <dd>How often the server samples the underlying data source.
+    Set to <code>0</code> to use the publishing interval as the sampling interval.</dd>
+
+    <dt>Queue Size <span class="property-type">number</span></dt>
+    <dd>Number of data changes the server queues per monitored item between publish cycles.
+    Prevents data loss during high-frequency changes.</dd>
+  </dl>
+
+  <h3>Advanced Settings</h3>
+  <dl class="message-properties">
+    <dt>Lifetime Count <span class="property-type">number</span></dt>
+    <dd>Number of publishing intervals the subscription can remain inactive before the
+    server deletes it. Default: 60.</dd>
+
+    <dt>Keep-Alive Count <span class="property-type">number</span></dt>
+    <dd>Number of publishing intervals without data changes before the server sends a
+    keep-alive message. Default: 10.</dd>
+
+    <dt>Max Notifications <span class="property-type">number</span></dt>
+    <dd>Maximum number of notifications per publish response. Default: 10.</dd>
+
+    <dt>Priority <span class="property-type">number</span></dt>
+    <dd>Relative priority of this subscription (0–255). Higher values indicate higher priority. Default: 10.</dd>
+  </dl>
+
+  <h3>Usage</h3>
+  <p>Create one or more subscription configurations with different parameters, then
+  select them in OPC UA Action nodes. Items using the same subscription share its
+  publishing interval and server resources.</p>
+  <p>For example, create a "Fast" subscription (100ms) for critical real-time data,
+  and a "Slow" subscription (5000ms) for non-critical monitoring.</p>
+</script>

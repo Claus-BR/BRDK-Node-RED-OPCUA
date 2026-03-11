@@ -15,10 +15,8 @@
     defaults: {
       action:              { value: "read", required: true },
       name:                { value: "" },
-      // Subscribe / Monitor / Events
-      time:                { value: 10 },
-      timeUnit:            { value: "s" },
-      queueSize:           { value: 10 },
+      // Subscription config node
+      subscription:        { value: "", type: "opcua-subscription" },
       // Monitor only
       deadbandtype:        { value: "a" },
       deadbandvalue:       { value: 1 },
@@ -61,7 +59,6 @@
     oneditprepare: function () {
       // Ensure defaults for properties added after node creation
       var defaults = {
-        time: 10, timeUnit: "s", queueSize: 10,
         deadbandtype: "a", deadbandvalue: 1,
         customEventFields: "", eventTypeIds: "",
         collect: false, maxDepth: 1,
@@ -89,7 +86,7 @@
       function updateVisibility() {
         var action = $("#node-input-action").val();
 
-        var isSubLike  = ["subscribe", "events", "monitor"].includes(action);
+        var isSubRelated = ["subscribe", "events", "monitor", "unsubscribe", "deletesubscription"].includes(action);
         var isMonitor  = action === "monitor";
         var isEvents   = action === "events";
         var isBrowse   = action === "browse";
@@ -98,8 +95,7 @@
         var isMethod   = action === "method";
         var isConnect  = ["connect", "reconnect"].includes(action);
 
-        $(".action-interval-row").toggle(isSubLike);
-        $(".action-queuesize-row").toggle(isSubLike);
+        $(".action-subscription-row").toggle(isSubRelated);
         $(".action-deadband-row").toggle(isMonitor);
         $(".action-eventfields-row").toggle(isEvents);
         $(".action-eventtypes-row").toggle(isEvents);
@@ -177,22 +173,10 @@
     </select>
   </div>
 
-  <!-- ── Subscribe / Monitor / Events: Interval ──────────────────────── -->
-  <div class="form-row action-interval-row" style="display: none;">
-    <label for="node-input-time"><i class="fa fa-clock-o"></i> Interval</label>
-    <input type="number" id="node-input-time" style="width: 80px;" min="1" placeholder="10">
-    <select id="node-input-timeUnit" style="width: 100px;">
-      <option value="ms">milliseconds</option>
-      <option value="s">seconds</option>
-      <option value="m">minutes</option>
-      <option value="h">hours</option>
-    </select>
-  </div>
-
-  <!-- ── Subscribe / Monitor / Events: Queue Size ────────────────────── -->
-  <div class="form-row action-queuesize-row" style="display: none;">
-    <label for="node-input-queueSize"><i class="fa fa-list-ol"></i> Queue Size</label>
-    <input type="number" id="node-input-queueSize" style="width: 80px;" min="0" placeholder="10">
+  <!-- ── Subscribe / Monitor / Events: Subscription Config ──────────── -->
+  <div class="form-row action-subscription-row" style="display: none;">
+    <label for="node-input-subscription"><i class="fa fa-rss"></i> Subscription</label>
+    <input type="text" id="node-input-subscription">
   </div>
 
   <!-- ── Monitor: Deadband ───────────────────────────────────────────── -->

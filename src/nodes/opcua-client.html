@@ -20,10 +20,9 @@
     defaults: {
       endpoint:         { value: "", type: "opcua-endpoint", required: true },
       action:           { value: "read", required: true },
+      subscription:     { value: "", type: "opcua-subscription" },
       deadbandtype:     { value: "a" },
       deadbandvalue:    { value: 1 },
-      time:             { value: 10 },
-      timeUnit:         { value: "s" },
       name:             { value: "" },
       // Transport settings
       useTransport:     { value: false },
@@ -55,11 +54,11 @@
 
       function updateVisibility() {
         var action = $("#node-input-action").val();
-        var showInterval = ["subscribe", "events", "monitor"].includes(action);
+        var showSubscription = ["subscribe", "events", "monitor", "unsubscribe", "deletesubscription"].includes(action);
         var showDeadband = action === "monitor";
         var showTransport = $("#node-input-useTransport").prop("checked");
 
-        $(".interval-row").toggle(showInterval);
+        $(".subscription-row").toggle(showSubscription);
         $(".deadband-row").toggle(showDeadband);
         $(".transport-row").toggle(showTransport);
       }
@@ -128,16 +127,10 @@
     </select>
   </div>
 
-  <!-- Interval (for subscribe/events/monitor) -->
-  <div class="form-row interval-row" style="display: none;">
-    <label for="node-input-time"><i class="fa fa-clock-o"></i> Interval</label>
-    <input type="number" id="node-input-time" style="width: 80px;" min="1">
-    <select id="node-input-timeUnit" style="width: 100px;">
-      <option value="ms">milliseconds</option>
-      <option value="s">seconds</option>
-      <option value="m">minutes</option>
-      <option value="h">hours</option>
-    </select>
+  <!-- Subscription config (for subscribe/events/monitor/unsubscribe/deletesubscription) -->
+  <div class="form-row subscription-row" style="display: none;">
+    <label for="node-input-subscription"><i class="fa fa-rss"></i> Subscription</label>
+    <input type="text" id="node-input-subscription">
   </div>
 
   <!-- Deadband (for monitor only) -->
