@@ -57,6 +57,7 @@ const STATUS_MAP = {
   "disconnected":       { fill: "red",    shape: "ring", text: "disconnected" },
   "terminated":         { fill: "red",    shape: "ring", text: "terminated" },
   "session closed":     { fill: "red",    shape: "ring", text: "session closed" },
+  "timed out":          { fill: "red",    shape: "ring", text: "timed out" },
   "invalid session":    { fill: "red",    shape: "ring", text: "invalid session" },
   "invalid endpoint":   { fill: "red",    shape: "ring", text: "invalid endpoint" },
   "invalid certificate":{ fill: "red",    shape: "ring", text: "invalid certificate" },

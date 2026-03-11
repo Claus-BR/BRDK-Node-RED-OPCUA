@@ -102,6 +102,7 @@ module.exports = function (RED) {
     this.currentStatus  = "";
     this.hasConnected   = false;
     this.isClosing      = false;
+    this.lastActivity   = 0;          // Timestamp of last session activity
 
     // ── Validate endpoint ──────────────────────────────────────────────
     if (!this.endpointNode) {
@@ -150,6 +151,8 @@ module.exports = function (RED) {
     //  CLIENT LIFECYCLE
     // ═══════════════════════════════════════════════════════════════════
 
+    const SESSION_TIMEOUT_MS = 60000;
+
     /**
      * Create the OPC UA client object (lightweight, no TCP connection).
      * Connection is deferred if connectOnStart is false.
@@ -169,7 +172,7 @@ module.exports = function (RED) {
           securityPolicy: resolveSecurityPolicy(node.endpointNode.securityPolicy),
           defaultSecureTokenLifetime: 200000,
           keepSessionAlive: node.keepSessionAlive,
-          requestedSessionTimeout: 60000,
+          requestedSessionTimeout: SESSION_TIMEOUT_MS,
           endpointMustExist: false,
           connectionStrategy: DEFAULT_CONNECTION_STRATEGY,
         };
@@ -226,6 +229,7 @@ module.exports = function (RED) {
       }
 
       setStatus("session active");
+      node.lastActivity = Date.now();
 
       // Register session close handler
       node.session.on("session_closed", () => {
@@ -244,6 +248,7 @@ module.exports = function (RED) {
     /**
      * Register event handlers on the OPC UA client for reconnection.
      */
+    
     function registerClientEventHandlers() {
       node.client.on("connection_reestablished", () => {
         if (node.isClosing) return;
@@ -268,6 +273,18 @@ module.exports = function (RED) {
       });
 
       node.client.on("connection_lost", () => {
+
+        // Detect inactivity timeout: if no request was made within the
+        // session timeout window, the server closed the session.
+        // Don't reconnect — go idle and let the next message re-connect.
+        const idleMs = Date.now() - node.lastActivity;
+        if (!node.subscription && idleMs >= SESSION_TIMEOUT_MS - 2000) {
+          node.session = null;
+          closeSession();
+          disconnectClient().then(() => setStatusWithDetail("timed out", "idle too long, connection closed by server"));
+          return;
+        }
+
         if (node.isClosing) return;
         setStatus("disconnected");
       });
@@ -317,6 +334,7 @@ module.exports = function (RED) {
 
       const handler = handlers[action];
       if (handler) {
+        node.lastActivity = Date.now();
         handler();
       } else {
         node.error(`Unknown action: "${action}"`, msg);

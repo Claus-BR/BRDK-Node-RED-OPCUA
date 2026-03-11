@@ -99,20 +99,13 @@ A modern, clean Node-RED OPC UA library for interacting with OPC UA servers and 
 ---
 
 ## Installation
-
+This project has yet to be packaged by npm so currently you can do:
 ```bash
 cd ~/.node-red
-npm install @brdk/node-red-opcua
+npm install https://github.com/Claus-BR/BRDK-Node-RED-OPCUA
 ```
 
 Then restart Node-RED and the nodes will appear under the **BRDK OPCUA** category in the palette.
-
----
-
-## Requirements
-
-- **Node.js** &ge; 18
-- **Node-RED** &ge; 2.0.0
 
 ---
 
