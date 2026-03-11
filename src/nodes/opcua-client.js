@@ -272,20 +272,23 @@ module.exports = function (RED) {
         setStatus("reconnecting");
       });
 
+
+      const WINDOW = 5000; // 5 seconds window to detect session timeout
+
       node.client.on("connection_lost", () => {
+        if (node.isClosing) return;
 
         // Detect inactivity timeout: if no request was made within the
         // session timeout window, the server closed the session.
         // Don't reconnect — go idle and let the next message re-connect.
         const idleMs = Date.now() - node.lastActivity;
-        if (!node.subscription && idleMs >= SESSION_TIMEOUT_MS - 2000) {
-          node.session = null;
-          closeSession();
-          disconnectClient().then(() => setStatusWithDetail("timed out", "idle too long, connection closed by server"));
+        if (!node.subscription && idleMs >= SESSION_TIMEOUT_MS - WINDOW && idleMs <= SESSION_TIMEOUT_MS + WINDOW) {
+          closeSession()
+            .then(() => disconnectClient())
+            .then(() => setStatusWithDetail("timed out", "idle too long, connection closed by server"));
           return;
         }
 
-        if (node.isClosing) return;
         setStatus("disconnected");
       });
     }
