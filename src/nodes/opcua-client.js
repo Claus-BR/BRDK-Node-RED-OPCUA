@@ -456,8 +456,8 @@ module.exports = function (RED) {
      * SUBSCRIBE — Subscribe to value changes on one or more nodes.
      *
      * Uses `msg.items` to determine which nodes to subscribe to.
-     * For a single item, creates an individual ClientMonitoredItem.
-     * For multiple items, creates a ClientMonitoredItemGroup.
+     * Creates an individual ClientMonitoredItem per item for full
+     * per-item unsubscribe support.
      */
     async function actionSubscribe(msg, send, done) {
       if (!assertSession(msg, done)) return;
@@ -478,9 +478,13 @@ module.exports = function (RED) {
         const samplingInterval = resolveSamplingInterval(msg);
         const queueSize = resolveQueueSize(msg);
 
-        if (items.length === 1) {
-          // Single item — individual monitored item
-          const item = items[0];
+        for (const item of items) {
+          // Terminate existing monitored item if re-subscribing same nodeId
+          const existing = subItems.get(item.nodeId);
+          if (existing) {
+            try { await existing.terminate(); } catch { /* may already be terminated */ }
+          }
+
           const monitoredItem = opcua.ClientMonitoredItem.create(
             subscription,
             { nodeId: item.nodeId, attributeId: opcua.AttributeIds.Value },
@@ -509,9 +513,6 @@ module.exports = function (RED) {
           });
 
           subItems.set(item.nodeId, monitoredItem);
-        } else {
-          // Multiple items — monitored item group
-          await subscribeMultipleItems(items, msg, send, subscription, subConfigId);
         }
 
         setStatusWithDetail("subscribed", `${totalMonitoredItems()} monitored item(s)`);
@@ -553,6 +554,12 @@ module.exports = function (RED) {
           : opcua.DeadbandType.Absolute;
 
         for (const item of items) {
+          // Terminate existing monitored item if re-subscribing same nodeId
+          const existing = subItems.get(item.nodeId);
+          if (existing) {
+            try { await existing.terminate(); } catch { /* may already be terminated */ }
+          }
+
           const monitoredItem = opcua.ClientMonitoredItem.create(
             subscription,
             { nodeId: item.nodeId, attributeId: opcua.AttributeIds.Value },
@@ -1450,50 +1457,6 @@ module.exports = function (RED) {
     function resolveQueueSize(msg) {
       const subConfigNode = RED.nodes.getNode(msg.subscriptionId);
       return subConfigNode?.queueSize || 10;
-    }
-
-    /**
-     * Subscribe to multiple items in a group.
-     *
-     * @param {Array} items - Array of { nodeId, datatype, browseName }.
-     * @param {object} msg  - The original incoming message.
-     * @param {Function} send - The send function.
-     */
-    async function subscribeMultipleItems(items, msg, send, subscription, subConfigId) {
-      const samplingInterval = resolveSamplingInterval(msg);
-      const queueSize = resolveQueueSize(msg);
-      const subItems = getSubMonitoredItems(subConfigId);
-
-      const itemsToMonitor = items.map((item) => ({
-        nodeId: item.nodeId,
-        attributeId: opcua.AttributeIds.Value,
-      }));
-
-      const group = opcua.ClientMonitoredItemGroup.create(
-        subscription,
-        itemsToMonitor,
-        { samplingInterval, discardOldest: true, queueSize },
-        opcua.TimestampsToReturn.Both
-      );
-
-      group.on("changed", (monitoredItem, dataValue, index) => {
-        const item = items[index];
-        const outMsg = {
-          topic: item.nodeId,
-          datatype: item.datatype,
-          payload: dataValue.value?.value,
-          statusCode: dataValue.statusCode,
-          serverTimestamp: dataValue.serverTimestamp,
-          sourceTimestamp: dataValue.sourceTimestamp,
-        };
-        setStatus("value changed");
-        node.send([outMsg, null, null]);
-      });
-
-      // Track each item in the group for count and cleanup
-      for (const item of items) {
-        subItems.set(item.nodeId, group);
-      }
     }
 
     /**
