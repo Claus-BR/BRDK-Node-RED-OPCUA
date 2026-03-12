@@ -91,8 +91,7 @@ module.exports = function (RED) {
     // ── Internal state ─────────────────────────────────────────────────
     this.client       = null;          // OPCUAClient instance
     this.session      = null;          // ClientSession instance
-    this.subscriptions  = new Map();   // subscriptionId → ClientSubscription
-    this.monitoredItems = new Map();   // nodeId → { monitoredItem, subscriptionId }
+    this.subscriptions  = new Map();   // configId → { subscription, monitoredItems: Map<nodeId, entry> }
     this.cmdQueue       = [];          // Messages queued while connecting
     this.currentStatus  = "";
     this.hasConnected   = false;
@@ -232,7 +231,6 @@ module.exports = function (RED) {
           setStatus("session closed");
           node.session = null;
           node.subscriptions.clear();
-          node.monitoredItems.clear();
         }
       });
 
@@ -472,12 +470,13 @@ module.exports = function (RED) {
           return;
         }
 
+        const subConfigId = msg.subscriptionId;
         const subscription = ensureSubscription(msg);
+        const subItems = getSubMonitoredItems(subConfigId);
         setStatus("subscribing");
 
         const samplingInterval = resolveSamplingInterval(msg);
         const queueSize = resolveQueueSize(msg);
-        const subConfigId = msg.subscriptionId;
 
         if (items.length === 1) {
           // Single item — individual monitored item
@@ -509,14 +508,13 @@ module.exports = function (RED) {
             node.error(`Monitored item error: ${errStr}`, msg);
           });
 
-          const itemKey = `${subConfigId}:${item.nodeId}`;
-          node.monitoredItems.set(itemKey, { monitoredItem, subscriptionId: subConfigId, nodeId: item.nodeId });
+          subItems.set(item.nodeId, monitoredItem);
         } else {
           // Multiple items — monitored item group
           await subscribeMultipleItems(items, msg, send, subscription, subConfigId);
         }
 
-        setStatusWithDetail("subscribed", `${node.monitoredItems.size} monitored item(s)`);
+        setStatusWithDetail("subscribed", `${totalMonitoredItems()} monitored item(s)`);
         done();
       } catch (err) {
         handleActionError("subscription error", err, msg, done);
@@ -539,12 +537,13 @@ module.exports = function (RED) {
           return;
         }
 
+        const subConfigId = msg.subscriptionId;
         const subscription = ensureSubscription(msg);
+        const subItems = getSubMonitoredItems(subConfigId);
         setStatus("monitoring");
 
         const samplingInterval = resolveSamplingInterval(msg);
         const queueSize = resolveQueueSize(msg);
-        const subConfigId = msg.subscriptionId;
 
         // Resolve deadband settings
         const dbType = msg.deadbandType;
@@ -588,11 +587,10 @@ module.exports = function (RED) {
             node.error(`Monitored item error: ${errStr}`, msg);
           });
 
-          const itemKey = `${subConfigId}:${item.nodeId}`;
-          node.monitoredItems.set(itemKey, { monitoredItem, subscriptionId: subConfigId, nodeId: item.nodeId });
+          subItems.set(item.nodeId, monitoredItem);
         }
 
-        setStatusWithDetail("subscribed", `${node.monitoredItems.size} monitored item(s)`);
+        setStatusWithDetail("subscribed", `${totalMonitoredItems()} monitored item(s)`);
         done();
       } catch (err) {
         handleActionError("subscription error", err, msg, done);
@@ -601,24 +599,44 @@ module.exports = function (RED) {
 
     /**
      * UNSUBSCRIBE — Terminate monitoring for items in `msg.items`.
+     *
+     * If `msg.subscriptionId` is set, only removes from that subscription.
+     * Otherwise, removes the item from whichever subscription holds it.
      */
     async function actionUnsubscribe(msg, send, done) {
       const items = msg.items || [];
+      const subConfigId = msg.subscriptionId;
+      let count = 0;
 
       for (const item of items) {
-        const entry = node.monitoredItems.get(item.nodeId);
-        if (entry) {
-          try {
-            await entry.monitoredItem.terminate();
-            node.monitoredItems.delete(item.nodeId);
-          } catch (err) {
-            node.warn(`Unsubscribe error for ${item.nodeId}: ${err.message}`);
+        // Determine which subscription(s) to search
+        const targets = subConfigId
+          ? [[subConfigId, node.subscriptions.get(subConfigId)]]
+          : [...node.subscriptions.entries()];
+
+        for (const [, subEntry] of targets) {
+          if (!subEntry) continue;
+          const monitoredItem = subEntry.monitoredItems.get(item.nodeId);
+          if (monitoredItem) {
+            try {
+              await monitoredItem.terminate();
+            } catch (err) {
+              node.warn(`Unsubscribe error for ${item.nodeId}: ${err.message}`);
+            }
+            subEntry.monitoredItems.delete(item.nodeId);
+            count++;
+            break; // Only remove from the first matching subscription
           }
         }
       }
 
-      msg.payload = `Unsubscribed from ${items.length} item(s)`;
-      setStatusWithDetail("subscribed", `${node.monitoredItems.size} monitored item(s)`);
+      msg.payload = `Unsubscribed ${count} item(s)`;
+      const total = totalMonitoredItems();
+      if (total > 0) {
+        setStatusWithDetail("subscribed", `${total} monitored item(s)`);
+      } else {
+        setStatus("session active");
+      }
       send([msg, null, null]);
       done();
     }
@@ -865,9 +883,10 @@ module.exports = function (RED) {
       if (!assertSession(msg, done)) return;
 
       try {
-        const subscription = ensureSubscription(msg);
-        setStatus("subscribing");
         const subConfigId = msg.subscriptionId;
+        const subscription = ensureSubscription(msg);
+        const subItems = getSubMonitoredItems(subConfigId);
+        setStatus("subscribing");
 
         // Build event filter fields
         const baseFields = [
@@ -916,8 +935,8 @@ module.exports = function (RED) {
           node.error(`Event monitor error: ${errStr}`, msg);
         });
 
-        node.monitoredItems.set(`event:${eventNodeId}`, { monitoredItem, subscriptionId: subConfigId });
-        setStatusWithDetail("subscribed", `${node.monitoredItems.size} monitored item(s)`);
+        subItems.set(`event:${eventNodeId}`, monitoredItem);
+        setStatusWithDetail("subscribed", `${totalMonitoredItems()} monitored item(s)`);
         done();
       } catch (err) {
         handleActionError("subscription error", err, msg, done);
@@ -1341,9 +1360,11 @@ module.exports = function (RED) {
      * Ensure a subscription exists for the given subscription config.
      *
      * Uses `msg.subscriptionId` to look up an `opcua-subscription` config node.
+     * Each entry in `node.subscriptions` is:
+     *   { subscription: ClientSubscription, monitoredItems: Map<nodeId, entry> }
      *
      * @param {object}  msg - The incoming message (must have msg.subscriptionId).
-     * @returns {opcua.ClientSubscription} The resolved subscription.
+     * @returns {opcua.ClientSubscription} The resolved OPC UA subscription.
      */
     function ensureSubscription(msg) {
       const subConfigId = msg.subscriptionId;
@@ -1352,7 +1373,7 @@ module.exports = function (RED) {
       }
 
       const existing = node.subscriptions.get(subConfigId);
-      if (existing) return existing;
+      if (existing) return existing.subscription;
 
       const subConfigNode = RED.nodes.getNode(subConfigId);
       if (!subConfigNode) {
@@ -1370,6 +1391,9 @@ module.exports = function (RED) {
 
       const subscription = opcua.ClientSubscription.create(node.session, params);
 
+      const subEntry = { subscription, monitoredItems: new Map() };
+      node.subscriptions.set(subConfigId, subEntry);
+
       subscription.on("started", () => {
         // Status is set by the calling action (subscribe/monitor/events)
       });
@@ -1380,12 +1404,6 @@ module.exports = function (RED) {
 
       subscription.on("terminated", () => {
         node.subscriptions.delete(subConfigId);
-        // Remove monitored items belonging to this subscription
-        for (const [nodeId, entry] of node.monitoredItems) {
-          if (entry.subscriptionId === subConfigId) {
-            node.monitoredItems.delete(nodeId);
-          }
-        }
         if (node.subscriptions.size === 0) {
           setStatus("terminated");
         }
@@ -1396,8 +1414,26 @@ module.exports = function (RED) {
         node.error(`Subscription error: ${err.message}`);
       });
 
-      node.subscriptions.set(subConfigId, subscription);
       return subscription;
+    }
+
+    /**
+     * Count total monitored items across all subscriptions.
+     */
+    function totalMonitoredItems() {
+      let count = 0;
+      for (const [, entry] of node.subscriptions) {
+        count += entry.monitoredItems.size;
+      }
+      return count;
+    }
+
+    /**
+     * Get the monitored items Map for a subscription config ID.
+     * Returns undefined if the subscription doesn't exist.
+     */
+    function getSubMonitoredItems(subConfigId) {
+      return node.subscriptions.get(subConfigId)?.monitoredItems;
     }
 
     /**
@@ -1426,6 +1462,7 @@ module.exports = function (RED) {
     async function subscribeMultipleItems(items, msg, send, subscription, subConfigId) {
       const samplingInterval = resolveSamplingInterval(msg);
       const queueSize = resolveQueueSize(msg);
+      const subItems = getSubMonitoredItems(subConfigId);
 
       const itemsToMonitor = items.map((item) => ({
         nodeId: item.nodeId,
@@ -1453,18 +1490,12 @@ module.exports = function (RED) {
         node.send([outMsg, null, null]);
       });
 
-      // Track each item in the group for unsubscribe lookups
+      // Track each item in the group for count and cleanup
       for (const item of items) {
-        const itemKey = `${subConfigId}:${item.nodeId}`;
-        node.monitoredItems.set(itemKey, { monitoredItem: group, subscriptionId: subConfigId, nodeId: item.nodeId, isGroup: true });
+        subItems.set(item.nodeId, group);
       }
-
-      setStatusWithDetail("subscribed", `${node.monitoredItems.size} monitored item(s)`);
     }
 
-    /**
-     * Terminate the current subscription and all monitored items.
-     */
     /**
      * Terminate subscription(s) and clean up monitored items.
      *
@@ -1474,23 +1505,17 @@ module.exports = function (RED) {
     async function terminateSubscription(subConfigId) {
       if (subConfigId) {
         // Terminate a specific subscription
-        const sub = node.subscriptions.get(subConfigId);
-        if (sub) {
-          try { await sub.terminate(); } catch { /* may already be terminated */ }
+        const entry = node.subscriptions.get(subConfigId);
+        if (entry) {
+          try { await entry.subscription.terminate(); } catch { /* may already be terminated */ }
           node.subscriptions.delete(subConfigId);
-          for (const [key, entry] of node.monitoredItems) {
-            if (entry.subscriptionId === subConfigId) {
-              node.monitoredItems.delete(key);
-            }
-          }
         }
       } else {
         // Terminate all subscriptions
-        for (const [id, sub] of node.subscriptions) {
-          try { await sub.terminate(); } catch { /* may already be terminated */ }
+        for (const [, entry] of node.subscriptions) {
+          try { await entry.subscription.terminate(); } catch { /* may already be terminated */ }
         }
         node.subscriptions.clear();
-        node.monitoredItems.clear();
       }
     }
 
