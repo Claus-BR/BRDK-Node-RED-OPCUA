@@ -145,7 +145,7 @@ module.exports = function (RED) {
     //  CLIENT LIFECYCLE
     // ═══════════════════════════════════════════════════════════════════
 
-    const SESSION_TIMEOUT_MS = 60000;
+    const SESSION_TIMEOUT_MS = 120000; // 2 minutes — used to detect server-initiated session timeouts
 
     /**
      * Create the OPC UA client object (lightweight, no TCP connection).
@@ -477,6 +477,7 @@ module.exports = function (RED) {
 
         const samplingInterval = resolveSamplingInterval(msg);
         const queueSize = resolveQueueSize(msg);
+        const discardOldest = resolveDiscardOldest(msg);
 
         for (const item of items) {
           // Terminate existing monitored item if re-subscribing same nodeId
@@ -488,7 +489,7 @@ module.exports = function (RED) {
           const monitoredItem = opcua.ClientMonitoredItem.create(
             subscription,
             { nodeId: item.nodeId, attributeId: opcua.AttributeIds.Value },
-            { samplingInterval, discardOldest: true, queueSize },
+            { samplingInterval, discardOldest, queueSize },
             opcua.TimestampsToReturn.Both
           );
 
@@ -504,7 +505,7 @@ module.exports = function (RED) {
               serverPicoseconds: dataValue.serverPicoseconds,
               sourcePicoseconds: dataValue.sourcePicoseconds,
             };
-            setStatus("value changed");
+            setSubscribedStatus("value changed");
             node.send([outMsg, null, null]);
           });
 
@@ -515,7 +516,7 @@ module.exports = function (RED) {
           subItems.set(item.nodeId, monitoredItem);
         }
 
-        setStatusWithDetail("subscribed", `${totalMonitoredItems()} monitored item(s)`);
+        setSubscribedStatus("ready");
         done();
       } catch (err) {
         handleActionError("subscription error", err, msg, done);
@@ -545,6 +546,7 @@ module.exports = function (RED) {
 
         const samplingInterval = resolveSamplingInterval(msg);
         const queueSize = resolveQueueSize(msg);
+        const discardOldest = resolveDiscardOldest(msg);
 
         // Resolve deadband settings
         const dbType = msg.deadbandType;
@@ -565,7 +567,7 @@ module.exports = function (RED) {
             { nodeId: item.nodeId, attributeId: opcua.AttributeIds.Value },
             {
               samplingInterval,
-              discardOldest: true,
+              discardOldest,
               queueSize,
               filter: new opcua.DataChangeFilter({
                 trigger: opcua.DataChangeTrigger.StatusValue,
@@ -586,7 +588,7 @@ module.exports = function (RED) {
               serverTimestamp: dataValue.serverTimestamp,
               sourceTimestamp: dataValue.sourceTimestamp,
             };
-            setStatus("value changed");
+            setSubscribedStatus("value changed");
             node.send([outMsg, null, null]);
           });
 
@@ -597,7 +599,7 @@ module.exports = function (RED) {
           subItems.set(item.nodeId, monitoredItem);
         }
 
-        setStatusWithDetail("subscribed", `${totalMonitoredItems()} monitored item(s)`);
+        setSubscribedStatus("ready");
         done();
       } catch (err) {
         handleActionError("subscription error", err, msg, done);
@@ -614,6 +616,12 @@ module.exports = function (RED) {
       const items = msg.items || [];
       const subConfigId = msg.subscriptionId;
       let count = 0;
+
+      if (subConfigId && !node.subscriptions.has(subConfigId)) {
+        node.warn("Subscription is not active — nothing to unsubscribe from");
+        done();
+        return;
+      }
 
       for (const item of items) {
         // Determine which subscription(s) to search
@@ -638,11 +646,20 @@ module.exports = function (RED) {
       }
 
       msg.payload = `Unsubscribed ${count} item(s)`;
+
+      // Auto-delete subscriptions that no longer have any monitored items
+      for (const [configId, subEntry] of [...node.subscriptions.entries()]) {
+        if (subEntry.monitoredItems.size === 0) {
+          try { await subEntry.subscription.terminate(); } catch { /* may already be terminated */ }
+          node.subscriptions.delete(configId);
+        }
+      }
+
       const total = totalMonitoredItems();
-      if (total > 0) {
-        setStatusWithDetail("subscribed", `${total} monitored item(s)`);
-      } else {
+      if (total === 0) {
         setStatus("session active");
+      } else {
+        setSubscribedStatus("Unsubscribed");
       }
       send([msg, null, null]);
       done();
@@ -653,15 +670,24 @@ module.exports = function (RED) {
      */
     async function actionDeleteSubscription(msg, send, done) {
       try {
-        if (msg.subscriptionId) {
-          // Terminate a specific subscription
-          await terminateSubscription(msg.subscriptionId);
-        } else {
-          // No specific subscription — terminate all
-          await terminateSubscription();
+        if (!msg.subscriptionId) {
+          node.warn("No subscription specified — select a Subscription config in the Action node");
+          done();
+          return;
         }
+        if (!node.subscriptions.has(msg.subscriptionId)) {
+          node.warn("Subscription is not active — nothing to delete");
+          done();
+          return;
+        }
+        await terminateSubscription(msg.subscriptionId);
         msg.payload = "Subscription deleted";
-        setStatus("session active");
+        const total = totalMonitoredItems();
+        if (total === 0) {
+          setStatus("session active");
+        } else {
+          setSubscribedStatus("deleted");
+        }
         send([msg, null, null]);
       } catch (err) {
         node.warn(`Delete subscription error: ${err.message}`);
@@ -906,6 +932,7 @@ module.exports = function (RED) {
 
         const eventNodeId = resolveNodeId(msg) || "i=2253"; // Default: Server object
         const eventTypeIds = msg.eventTypeIds || "i=2041"; // Default: BaseEvent
+        const discardOldest = resolveDiscardOldest(msg);
 
         const monitoredItem = opcua.ClientMonitoredItem.create(
           subscription,
@@ -915,7 +942,7 @@ module.exports = function (RED) {
           },
           {
             samplingInterval: 0,
-            discardOldest: true,
+            discardOldest,
             queueSize: 100,
             filter: eventFilter,
           }
@@ -934,7 +961,7 @@ module.exports = function (RED) {
             payload: eventData,
             eventFields,
           };
-          setStatus("event received");
+          setSubscribedStatus("event received");
           node.send([outMsg, null, null]);
         });
 
@@ -943,7 +970,7 @@ module.exports = function (RED) {
         });
 
         subItems.set(`event:${eventNodeId}`, monitoredItem);
-        setStatusWithDetail("subscribed", `${totalMonitoredItems()} monitored item(s)`);
+        setSubscribedStatus("ready");
         done();
       } catch (err) {
         handleActionError("subscription error", err, msg, done);
@@ -1406,7 +1433,7 @@ module.exports = function (RED) {
       });
 
       subscription.on("keepalive", () => {
-        setStatus("keepalive");
+        setSubscribedStatus("keepalive");
       });
 
       subscription.on("terminated", () => {
@@ -1457,6 +1484,14 @@ module.exports = function (RED) {
     function resolveQueueSize(msg) {
       const subConfigNode = RED.nodes.getNode(msg.subscriptionId);
       return subConfigNode?.queueSize || 10;
+    }
+
+    /**
+     * Get the discardOldest flag from the subscription config node.
+     */
+    function resolveDiscardOldest(msg) {
+      const subConfigNode = RED.nodes.getNode(msg.subscriptionId);
+      return subConfigNode?.discardOldest !== false;
     }
 
     /**
@@ -1591,6 +1626,16 @@ module.exports = function (RED) {
         status: statusKey,
       };
       node.send([null, statusMsg, null]);
+    }
+
+    /**
+     * Set a combined subscription status: "subscribed | N items | lastEvent".
+     * Uses the "subscribed" status key (green dot) with a detail string.
+     */
+    function setSubscribedStatus(lastEvent) {
+      const count = totalMonitoredItems();
+      const detail = `${count} item(s) | ${lastEvent}`;
+      setStatusWithDetail("subscribed", detail);
     }
 
     /**

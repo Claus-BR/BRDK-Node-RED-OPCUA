@@ -22,6 +22,7 @@
       samplingTime:                { value: 0, validate: RED.validators.number() },
       samplingTimeUnit:            { value: "s" },
       queueSize:                   { value: 10, validate: RED.validators.number() },
+      discardOldest:               { value: true },
       lifetimeCount:               { value: 60, validate: RED.validators.number() },
       maxKeepAliveCount:           { value: 10, validate: RED.validators.number() },
       maxNotificationsPerPublish:  { value: 10, validate: RED.validators.number() },
@@ -126,6 +127,13 @@
     <span style="font-size: 0.85em; color: #999;">0–255</span>
   </div>
 
+  <!-- Advanced: Discard Oldest -->
+  <div class="form-row opcua-sub-advanced-row" style="display: none;">
+    <label for="node-config-input-discardOldest"><i class="fa fa-trash-o"></i> Discard Oldest</label>
+    <input type="checkbox" id="node-config-input-discardOldest" style="width: auto;">
+    <span style="font-size: 0.85em; color: #999;">when queue is full, discard oldest values</span>
+  </div>
+
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
@@ -161,6 +169,10 @@
 
     <dt>Max Notifications <span class="property-type">number</span></dt>
     <dd>Maximum number of notifications per publish response. Default: 10.</dd>
+
+    <dt>Discard Oldest <span class="property-type">boolean</span></dt>
+    <dd>When the queue is full, discard the oldest values. Enabled by default.
+    When disabled, the newest values are discarded instead.</dd>
 
     <dt>Priority <span class="property-type">number</span></dt>
     <dd>Relative priority of this subscription (0–255). Higher values indicate higher priority. Default: 10.</dd>

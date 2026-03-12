@@ -47,6 +47,7 @@ module.exports = function (RED) {
     this.samplingInterval = sampTime === 0 ? 0 : toMilliseconds(sampTime, sampUnit);
 
     this.queueSize                  = Number(config.queueSize) || 10;
+    this.discardOldest              = config.discardOldest !== false;
     this.lifetimeCount              = Number(config.lifetimeCount) || 60;
     this.maxKeepAliveCount          = Number(config.maxKeepAliveCount) || 10;
     this.maxNotificationsPerPublish = Number(config.maxNotificationsPerPublish) || 10;
