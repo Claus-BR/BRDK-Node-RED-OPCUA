@@ -71,9 +71,6 @@ module.exports = function (RED) {
 
     // ── Configuration from editor ──────────────────────────────────────
     this.endpointNode   = RED.nodes.getNode(config.endpoint);
-    this.action         = config.action || "read";
-    this.deadbandType   = config.deadbandtype || "a";
-    this.deadbandValue  = Number(config.deadbandvalue) || 1;
     this.name           = config.name || "";
 
     // Transport settings
@@ -90,9 +87,6 @@ module.exports = function (RED) {
     // Client identity
     this.applicationName = config.applicationName || "BRDK-NodeRED-OPCUA-Client";
     this.applicationUri  = config.applicationUri || "";
-
-    // Subscription config node (used when client's built-in action is subscription-related)
-    this.subscriptionNode = RED.nodes.getNode(config.subscription);
 
     // ── Internal state ─────────────────────────────────────────────────
     this.client       = null;          // OPCUAClient instance
@@ -120,7 +114,7 @@ module.exports = function (RED) {
 
     node.on("input", (msg, send, done) => {
       // Determine the action to perform
-      const action = msg.action || msg.payload?.action || node.action;
+      const action = msg.action || msg.payload?.action;
 
       // If we don't have a valid session yet, queue the message
       if (shouldQueueMessage(action)) {
@@ -300,7 +294,7 @@ module.exports = function (RED) {
     function replayCommandQueue() {
       const queued = node.cmdQueue.splice(0);
       for (const { msg, send, done } of queued) {
-        const action = msg.action || msg.payload?.action || node.action;
+        const action = msg.action || msg.payload?.action;
         routeAction(action, msg, send, done);
       }
     }
@@ -313,13 +307,6 @@ module.exports = function (RED) {
      * Route a message to the correct action handler.
      */
     function routeAction(action, msg, send, done) {
-       // Inject subscriptionId for subscription-related actions when not already set
-      if (["subscribe", "monitor", "events", "unsubscribe", "deletesubscription"].includes(action)) {
-        if (!msg.subscriptionId && node.subscriptionNode) {
-          msg.subscriptionId = node.subscriptionNode.id;
-        }
-      }
-      
       const handlers = {
         read:                () => actionRead(msg, send, done),
         write:               () => actionWrite(msg, send, done),
@@ -522,13 +509,14 @@ module.exports = function (RED) {
             node.error(`Monitored item error: ${errStr}`, msg);
           });
 
-          node.monitoredItems.set(item.nodeId, { monitoredItem, subscriptionId: subConfigId });
+          const itemKey = `${subConfigId}:${item.nodeId}`;
+          node.monitoredItems.set(itemKey, { monitoredItem, subscriptionId: subConfigId, nodeId: item.nodeId });
         } else {
           // Multiple items — monitored item group
           await subscribeMultipleItems(items, msg, send, subscription, subConfigId);
         }
 
-        setStatus("subscribed");
+        setStatusWithDetail("subscribed", `${node.monitoredItems.size} monitored item(s)`);
         done();
       } catch (err) {
         handleActionError("subscription error", err, msg, done);
@@ -558,9 +546,9 @@ module.exports = function (RED) {
         const queueSize = resolveQueueSize(msg);
         const subConfigId = msg.subscriptionId;
 
-        // Resolve deadband settings (msg overrides node config)
-        const dbType = msg.deadbandType || node.deadbandType;
-        const dbValue = msg.deadbandValue ?? node.deadbandValue;
+        // Resolve deadband settings
+        const dbType = msg.deadbandType;
+        const dbValue = msg.deadbandValue;
         const deadbandType = dbType === "p"
           ? opcua.DeadbandType.Percent
           : opcua.DeadbandType.Absolute;
@@ -600,10 +588,11 @@ module.exports = function (RED) {
             node.error(`Monitored item error: ${errStr}`, msg);
           });
 
-          node.monitoredItems.set(item.nodeId, { monitoredItem, subscriptionId: subConfigId });
+          const itemKey = `${subConfigId}:${item.nodeId}`;
+          node.monitoredItems.set(itemKey, { monitoredItem, subscriptionId: subConfigId, nodeId: item.nodeId });
         }
 
-        setStatus("monitoring");
+        setStatusWithDetail("subscribed", `${node.monitoredItems.size} monitored item(s)`);
         done();
       } catch (err) {
         handleActionError("subscription error", err, msg, done);
@@ -629,7 +618,7 @@ module.exports = function (RED) {
       }
 
       msg.payload = `Unsubscribed from ${items.length} item(s)`;
-      setStatus("subscribed");
+      setStatusWithDetail("subscribed", `${node.monitoredItems.size} monitored item(s)`);
       send([msg, null, null]);
       done();
     }
@@ -928,7 +917,7 @@ module.exports = function (RED) {
         });
 
         node.monitoredItems.set(`event:${eventNodeId}`, { monitoredItem, subscriptionId: subConfigId });
-        setStatus("subscribed");
+        setStatusWithDetail("subscribed", `${node.monitoredItems.size} monitored item(s)`);
         done();
       } catch (err) {
         handleActionError("subscription error", err, msg, done);
@@ -1464,7 +1453,13 @@ module.exports = function (RED) {
         node.send([outMsg, null, null]);
       });
 
-      setStatus("subscribed");
+      // Track each item in the group for unsubscribe lookups
+      for (const item of items) {
+        const itemKey = `${subConfigId}:${item.nodeId}`;
+        node.monitoredItems.set(itemKey, { monitoredItem: group, subscriptionId: subConfigId, nodeId: item.nodeId, isGroup: true });
+      }
+
+      setStatusWithDetail("subscribed", `${node.monitoredItems.size} monitored item(s)`);
     }
 
     /**
@@ -1483,9 +1478,9 @@ module.exports = function (RED) {
         if (sub) {
           try { await sub.terminate(); } catch { /* may already be terminated */ }
           node.subscriptions.delete(subConfigId);
-          for (const [nodeId, entry] of node.monitoredItems) {
+          for (const [key, entry] of node.monitoredItems) {
             if (entry.subscriptionId === subConfigId) {
-              node.monitoredItems.delete(nodeId);
+              node.monitoredItems.delete(key);
             }
           }
         }

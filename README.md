@@ -65,6 +65,7 @@ A modern, clean Node-RED OPC UA library for interacting with OPC UA servers and 
 ### OPC UA Client
 - [] Testing
 - [] JSON Serilazation of outputs.
+- [] FIX UNSUBSCRIBE so it unsubs the right node on the right subscribtion id.
 
 ### OPC UA Server
 - [] Testing

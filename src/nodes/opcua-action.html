@@ -15,8 +15,12 @@
     defaults: {
       action:              { value: "read", required: true },
       name:                { value: "" },
-      // Subscription config node
-      subscription:        { value: "", type: "opcua-subscription" },
+      // Subscription config node (optional for non-subscription actions)
+      subscription:        { value: "", type: "opcua-subscription", validate: function (v) {
+        var action = this.action;
+        if (!["subscribe", "events", "monitor", "unsubscribe", "deletesubscription"].includes(action)) return true;
+        return !!v;
+      }},
       // Monitor only
       deadbandtype:        { value: "a" },
       deadbandvalue:       { value: 1 },
