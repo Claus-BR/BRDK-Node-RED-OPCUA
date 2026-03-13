@@ -19,6 +19,7 @@
     "version": ">=2.0.0",
     "nodes": {
       "opcua-endpoint": "src/nodes/opcua-endpoint.js",
+      "opcua-subscription": "src/nodes/opcua-subscription.js",
       "opcua-item": "src/nodes/opcua-item.js",
       "opcua-smart-item": "src/nodes/opcua-smart-item.js",
       "opcua-action": "src/nodes/opcua-action.js",

@@ -19,11 +19,6 @@
     color: "#3FADB5",
     defaults: {
       endpoint:         { value: "", type: "opcua-endpoint", required: true },
-      action:           { value: "read", required: true },
-      deadbandtype:     { value: "a" },
-      deadbandvalue:    { value: 1 },
-      time:             { value: 10 },
-      timeUnit:         { value: "s" },
       name:             { value: "" },
       // Transport settings
       useTransport:     { value: false },
@@ -51,22 +46,12 @@
     outputLabels: ["data", "status", "batch"],
 
     oneditprepare: function () {
-      var node = this;
-
       function updateVisibility() {
-        var action = $("#node-input-action").val();
-        var showInterval = ["subscribe", "events", "monitor"].includes(action);
-        var showDeadband = action === "monitor";
         var showTransport = $("#node-input-useTransport").prop("checked");
-
-        $(".interval-row").toggle(showInterval);
-        $(".deadband-row").toggle(showDeadband);
         $(".transport-row").toggle(showTransport);
       }
 
-      $("#node-input-action").on("change", updateVisibility);
       $("#node-input-useTransport").on("change", updateVisibility);
-
       updateVisibility();
     },
   });
@@ -81,73 +66,6 @@
   <div class="form-row">
     <label for="node-input-endpoint"><i class="fa fa-globe"></i> Endpoint</label>
     <input type="text" id="node-input-endpoint">
-  </div>
-
-  <!-- Action -->
-  <div class="form-row">
-    <label for="node-input-action"><i class="fa fa-bolt"></i> Action</label>
-    <select id="node-input-action">
-      <optgroup label="Data Access">
-        <option value="read">Read</option>
-        <option value="write">Write</option>
-      </optgroup>
-      <optgroup label="Subscriptions">
-        <option value="subscribe">Subscribe</option>
-        <option value="monitor">Monitor (Deadband)</option>
-        <option value="unsubscribe">Unsubscribe</option>
-        <option value="deletesubscription">Delete Subscription</option>
-      </optgroup>
-      <optgroup label="Browsing">
-        <option value="browse">Browse</option>
-        <option value="info">Info (All Attributes)</option>
-      </optgroup>
-      <optgroup label="Events">
-        <option value="events">Events</option>
-        <option value="acknowledge">Acknowledge</option>
-      </optgroup>
-      <optgroup label="Methods">
-        <option value="method">Call Method</option>
-      </optgroup>
-      <optgroup label="History">
-        <option value="history">History Read</option>
-      </optgroup>
-      <optgroup label="File Transfer">
-        <option value="readfile">Read File</option>
-        <option value="writefile">Write File</option>
-      </optgroup>
-      <optgroup label="Advanced">
-        <option value="build">Build ExtensionObject</option>
-        <option value="register">Register Nodes</option>
-        <option value="unregister">Unregister Nodes</option>
-      </optgroup>
-      <optgroup label="Connection">
-        <option value="connect">Connect</option>
-        <option value="disconnect">Disconnect</option>
-        <option value="reconnect">Reconnect</option>
-      </optgroup>
-    </select>
-  </div>
-
-  <!-- Interval (for subscribe/events/monitor) -->
-  <div class="form-row interval-row" style="display: none;">
-    <label for="node-input-time"><i class="fa fa-clock-o"></i> Interval</label>
-    <input type="number" id="node-input-time" style="width: 80px;" min="1">
-    <select id="node-input-timeUnit" style="width: 100px;">
-      <option value="ms">milliseconds</option>
-      <option value="s">seconds</option>
-      <option value="m">minutes</option>
-      <option value="h">hours</option>
-    </select>
-  </div>
-
-  <!-- Deadband (for monitor only) -->
-  <div class="form-row deadband-row" style="display: none;">
-    <label for="node-input-deadbandtype"><i class="fa fa-filter"></i> Deadband</label>
-    <select id="node-input-deadbandtype" style="width: 100px;">
-      <option value="a">Absolute</option>
-      <option value="p">Percent</option>
-    </select>
-    <input type="number" id="node-input-deadbandvalue" style="width: 80px;" step="0.1" min="0">
   </div>
 
   <hr>

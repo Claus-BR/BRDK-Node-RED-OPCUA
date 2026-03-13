@@ -30,11 +30,6 @@ module.exports = function (RED) {
     this.action = config.action || "read";
     this.name   = config.name   || "";
 
-    // ── Subscribe / Monitor / Events ────────────────────────────────────
-    this.time          = Number(config.time) || 10;
-    this.timeUnit      = config.timeUnit || "s";
-    this.queueSize     = Number(config.queueSize) || 10;
-
     // ── Monitor only ────────────────────────────────────────────────────
     this.deadbandType  = config.deadbandtype || "a";
     this.deadbandValue = Number(config.deadbandvalue) || 1;
@@ -67,6 +62,9 @@ module.exports = function (RED) {
     // ── Connect / Reconnect ─────────────────────────────────────────────
     this.endpointUrl = config.endpointUrl || "";
 
+    // ── Subscription config node reference ──────────────────────────────
+    this.subscriptionNode = RED.nodes.getNode(config.subscription);
+
     const node = this;
 
     // ── Input handler ────────────────────────────────────────────────────
@@ -75,20 +73,23 @@ module.exports = function (RED) {
 
       switch (node.action) {
         case "subscribe":
-          msg.interval  = msg.interval  || toMilliseconds(node.time, node.timeUnit);
-          msg.queueSize = msg.queueSize || node.queueSize;
+          if (node.subscriptionNode) {
+            msg.subscriptionId = msg.subscriptionId || node.subscriptionNode.id;
+          }
           break;
 
         case "events":
-          msg.interval  = msg.interval  || toMilliseconds(node.time, node.timeUnit);
-          msg.queueSize = msg.queueSize || node.queueSize;
+          if (node.subscriptionNode) {
+            msg.subscriptionId = msg.subscriptionId || node.subscriptionNode.id;
+          }
           break;
 
         case "monitor":
-          msg.interval      = msg.interval      || toMilliseconds(node.time, node.timeUnit);
-          msg.queueSize     = msg.queueSize     || node.queueSize;
           msg.deadbandType  = msg.deadbandType  || node.deadbandType;
           msg.deadbandValue = msg.deadbandValue ?? node.deadbandValue;
+          if (node.subscriptionNode) {
+            msg.subscriptionId = msg.subscriptionId || node.subscriptionNode.id;
+          }
           break;
 
         case "browse":
@@ -116,6 +117,13 @@ module.exports = function (RED) {
         case "method":
           msg.objectId = msg.objectId || node.objectId;
           msg.methodId = msg.methodId || node.methodId;
+          break;
+
+        case "unsubscribe":
+        case "deletesubscription":
+          if (node.subscriptionNode) {
+            msg.subscriptionId = msg.subscriptionId || node.subscriptionNode.id;
+          }
           break;
 
         case "connect":

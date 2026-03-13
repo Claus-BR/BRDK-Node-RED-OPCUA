@@ -27,13 +27,11 @@ const STATUS_MAP = {
   "connected":          { fill: "green",  shape: "ring", text: "connected" },
   "initialized":        { fill: "green",  shape: "ring", text: "initialized" },
   "session active":     { fill: "green",  shape: "dot",  text: "session active" },
-  "keepalive":          { fill: "green",  shape: "ring", text: "keepalive" },
   "re-established":     { fill: "green",  shape: "ring", text: "re-established" },
 
   // ── Transitional ────────────────────────────────────────────────────────
   "connecting":         { fill: "yellow", shape: "dot",  text: "connecting" },
   "reconnecting":       { fill: "yellow", shape: "dot",  text: "reconnecting" },
-  "closing":            { fill: "yellow", shape: "dot",  text: "closing" },
   "extracting datatypes": { fill: "yellow", shape: "dot",  text: "extracting datatypes" },
   // ── Active operations ────────────────────────────────────────────────────
   "reading":            { fill: "green",  shape: "dot",  text: "reading" },
@@ -44,12 +42,9 @@ const STATUS_MAP = {
   "monitoring":         { fill: "green",  shape: "dot",  text: "monitoring" },
   "browsing":           { fill: "green",  shape: "dot",  text: "browsing" },
   "browse done":        { fill: "green",  shape: "dot",  text: "browse done" },
-  "value changed":      { fill: "green",  shape: "dot",  text: "value changed" },
   "value written":      { fill: "green",  shape: "dot",  text: "value written" },
-  "values written":     { fill: "green",  shape: "dot",  text: "values written" },
   "calling method":     { fill: "green",  shape: "dot",  text: "calling method" },
   "method executed":    { fill: "green",  shape: "dot",  text: "method executed" },
-  "event received":     { fill: "green",  shape: "dot",  text: "event received" },
   "acknowledging":      { fill: "green",  shape: "dot",  text: "acknowledging" },
 
   // ── Errors ───────────────────────────────────────────────────────────────
@@ -58,16 +53,10 @@ const STATUS_MAP = {
   "terminated":         { fill: "red",    shape: "ring", text: "terminated" },
   "session closed":     { fill: "red",    shape: "ring", text: "session closed" },
   "timed out":          { fill: "red",    shape: "ring", text: "timed out" },
-  "invalid session":    { fill: "red",    shape: "ring", text: "invalid session" },
   "invalid endpoint":   { fill: "red",    shape: "ring", text: "invalid endpoint" },
   "invalid certificate":{ fill: "red",    shape: "ring", text: "invalid certificate" },
   "no session":         { fill: "red",    shape: "ring", text: "no session" },
   "subscription error": { fill: "red",    shape: "ring", text: "subscription error" },
-  "no items":           { fill: "red",    shape: "ring", text: "no items to process" },
-  "write error":        { fill: "red",    shape: "ring", text: "write error" },
-  "read error":         { fill: "red",    shape: "ring", text: "read error" },
-  "browse error":       { fill: "red",    shape: "ring", text: "browse error" },
-  "method error":       { fill: "red",    shape: "ring", text: "method error" },
   "command error":      { fill: "red",    shape: "ring", text: "command error" },
 
   // ── Server lifecycle ─────────────────────────────────────────────────────
@@ -101,7 +90,6 @@ const STATUS_MAP = {
 
   // ── Idle / default ───────────────────────────────────────────────────────
   "waiting":            { fill: "blue",   shape: "ring", text: "waiting" },
-  "idle":               { fill: "grey",   shape: "ring", text: "idle" },
 };
 
 /**
