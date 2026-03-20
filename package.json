@@ -6,7 +6,7 @@
   "author": "Clausbr",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Claus-BR/BRDK-Node-RED-OPCUA"
+    "url": "git+https://github.com/Claus-BR/BRDK-Node-RED-OPCUA.git"
   },
   "keywords": [
     "node-red",
