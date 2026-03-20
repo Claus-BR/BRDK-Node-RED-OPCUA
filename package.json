@@ -4,6 +4,10 @@
   "description": "A modern, clean Node-RED OPC UA client library for interacting with OPC UA servers",
   "license": "Apache-2.0",
   "author": "Clausbr",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Claus-BR/BRDK-Node-RED-OPCUA"
+  },
   "keywords": [
     "node-red",
     "opcua",
