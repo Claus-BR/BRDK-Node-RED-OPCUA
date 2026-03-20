@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "A modern, clean Node-RED OPC UA client library for interacting with OPC UA servers",
   "license": "Apache-2.0",
-  "author": "BRDK",
+  "author": "Clausbr",
   "keywords": [
     "node-red",
     "opcua",
