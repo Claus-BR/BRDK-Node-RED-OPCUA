@@ -96,6 +96,7 @@ module.exports = function (RED) {
     this.currentStatus  = "";
     this.hasConnected   = false;
     this.isClosing      = false;
+    this.sessionReady   = false;       // True only after datatypes extracted and queue replayed
     this.lastActivity   = 0;          // Timestamp of last session activity
 
     // ── Validate endpoint ──────────────────────────────────────────────
@@ -228,11 +229,13 @@ module.exports = function (RED) {
 
       setStatus("session active");
       node.lastActivity = Date.now();
+      node.sessionReady = true;
 
       // Register session close handler
       node.session.on("session_closed", () => {
         if (!node.isClosing) {
           setStatus("session closed");
+          node.sessionReady = false;
           node.session = null;
           node.subscriptions.clear();
         }
@@ -1332,6 +1335,7 @@ module.exports = function (RED) {
 
       node.client = null;
       node.session = null;
+      node.sessionReady = false;
       node.hasConnected = false;
 
       // Recreate client and connect — initializeClient only auto-connects
@@ -1535,6 +1539,7 @@ module.exports = function (RED) {
         } catch {
           // Session may already be closed
         }
+        node.sessionReady = false;
         node.session = null;
       }
     }
@@ -1574,6 +1579,9 @@ module.exports = function (RED) {
       // Queue if no session or session is reconnecting
       if (!node.session) return true;
       if (node.session.isReconnecting) return true;
+
+      // Queue if session exists but datatypes haven't been extracted yet
+      if (!node.sessionReady) return true;
 
       return false;
     }
