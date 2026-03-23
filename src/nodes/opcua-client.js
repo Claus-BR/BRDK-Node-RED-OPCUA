@@ -203,6 +203,10 @@ module.exports = function (RED) {
      * Connect to the server and create a session.
      */
     async function connectAndCreateSession() {
+      if (node.currentStatus === "connecting") { //skip if is allready connecting
+        return;
+      }
+
       const endpointUrl = node.endpointNode.endpoint;
 
       setStatus("connecting");
