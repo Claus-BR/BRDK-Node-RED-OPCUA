@@ -28,7 +28,6 @@
       "opcua-smart-item": "src/nodes/opcua-smart-item.js",
       "opcua-action": "src/nodes/opcua-action.js",
       "opcua-client": "src/nodes/opcua-client.js",
-      "opcua-method": "src/nodes/opcua-method.js",
       "opcua-discovery": "src/nodes/opcua-discovery.js",
       "opcua-rights": "src/nodes/opcua-rights.js",
       "opcua-server": "src/nodes/opcua-server.js",

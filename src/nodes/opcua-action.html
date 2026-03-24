@@ -26,9 +26,6 @@
       deadbandvalue:       { value: 1 },
       // Events only
       customEventFields:   { value: "" },
-      // Browse
-      collect:             { value: false },
-      maxDepth:            { value: 1 },
       // Events
       eventTypeSelect:     { value: "i=2041" },
       eventTypeIds:        { value: "" },
@@ -47,6 +44,7 @@
       // Method
       objectId:            { value: "" },
       methodId:            { value: "" },
+      methodArgs:          { value: "[]" },
       // Connect / Reconnect
       endpointUrl:         { value: "" },
     },
@@ -126,6 +124,65 @@
         }
       }
 
+      // ── Method arguments: dynamic editable list ─────────────────
+      var TYPE_OPTIONS = '<option value="String">String</option>' +
+        '<option value="Double">Double</option>' +
+        '<option value="Float">Float</option>' +
+        '<option value="Int32">Int32</option>' +
+        '<option value="Int16">Int16</option>' +
+        '<option value="SByte">SByte</option>' +
+        '<option value="UInt32">UInt32</option>' +
+        '<option value="UInt16">UInt16</option>' +
+        '<option value="Byte">Byte</option>' +
+        '<option value="Boolean">Boolean</option>' +
+        '<option value="DateTime">DateTime</option>' +
+        '<option value="NodeId">NodeId</option>' +
+        '<option value="ExtensionObject">ExtensionObject</option>' +
+        '<option value="LocalizedText">LocalizedText</option>';
+
+      $("#node-input-methodArgs-list").editableList({
+        addItem: function (row, index, data) {
+          var typeSelect = $('<select style="width:25%;">' + TYPE_OPTIONS + '</select>');
+          var valueInput = $('<input type="text" placeholder="Value" style="flex:1;">');
+          var typeidInput = $('<input type="text" placeholder="TypeId (ns=2;i=...)" style="flex:1;display:none;">');
+
+          var wrapper = $('<div style="display:flex;align-items:center;gap:6px;"></div>');
+          wrapper.append(typeSelect).append(valueInput);
+          row.append(wrapper);
+          row.append(typeidInput);
+
+          typeSelect.on("change", function () {
+            typeidInput.toggle(typeSelect.val() === "ExtensionObject");
+          });
+
+          // Restore data
+          if (data.dataType) typeSelect.val(data.dataType);
+          if (data.value !== undefined) valueInput.val(data.value);
+          if (data.typeid) typeidInput.val(data.typeid);
+          typeidInput.toggle(typeSelect.val() === "ExtensionObject");
+
+          row.data("getArg", function () {
+            var dt = typeSelect.val();
+            if (!dt) return null;
+            var arg = { dataType: dt, value: valueInput.val() };
+            var tid = typeidInput.val();
+            if (tid) arg.typeid = tid;
+            return arg;
+          });
+        },
+        removable: true,
+        sortable: true,
+        addButton: true,
+        height: 200
+      });
+
+      // Populate existing args
+      var existingArgs = [];
+      try { existingArgs = JSON.parse(this.methodArgs || "[]"); } catch(e) {}
+      existingArgs.forEach(function (arg) {
+        $("#node-input-methodArgs-list").editableList("addItem", arg);
+      });
+
       // ── Event type dropdown: toggle custom text field ──────────────
       function updateEventTypeCustom() {
         var sel = $("#node-input-eventTypeSelect").val();
@@ -141,6 +198,20 @@
       $("#node-input-action").on("change", updateVisibility);
       $("#node-input-aggregate").on("change", updateVisibility);
       updateVisibility();
+    },
+
+    oneditsave: function () {
+      // Serialize editable list to JSON for storage
+      var args = [];
+      var items = $("#node-input-methodArgs-list").editableList("items");
+      items.each(function () {
+        var getArg = $(this).data("getArg");
+        if (getArg) {
+          var arg = getArg();
+          if (arg) args.push(arg);
+        }
+      });
+      this.methodArgs = JSON.stringify(args);
     },
   });
 </script>
@@ -308,6 +379,12 @@
     <input type="text" id="node-input-methodId" placeholder="ns=2;s=MyMethod">
   </div>
 
+  <!-- ── Method: Input Arguments (dynamic list) ──────────────────────── -->
+  <div class="form-row action-method-row" style="display: none;">
+    <label style="width: auto; margin-bottom: 4px;"><i class="fa fa-list"></i> Arguments</label>
+    <input type="hidden" id="node-input-methodArgs">
+    <ol id="node-input-methodArgs-list"></ol>
+  </div>
   <!-- ── Connect / Reconnect: Endpoint URL ─────────────────────────── -->
   <div class="form-row action-connect-row" style="display: none;">
     <label for="node-input-endpointUrl"><i class="fa fa-globe"></i> Endpoint URL</label>

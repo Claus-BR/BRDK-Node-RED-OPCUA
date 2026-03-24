@@ -59,6 +59,7 @@ module.exports = function (RED) {
     // ── Method ──────────────────────────────────────────────────────────
     this.objectId = config.objectId || "";
     this.methodId = config.methodId || "";
+    this.configuredInputArgs = parseMethodArgs(config.methodArgs);
 
     // ── Connect / Reconnect ─────────────────────────────────────────────
     this.endpointUrl = config.endpointUrl || "";
@@ -118,6 +119,9 @@ module.exports = function (RED) {
         case "method":
           msg.objectId = msg.objectId || node.objectId;
           msg.methodId = msg.methodId || node.methodId;
+          if (!msg.inputArguments && node.configuredInputArgs.length > 0) {
+            msg.inputArguments = node.configuredInputArgs;
+          }
           break;
 
         case "unsubscribe":
@@ -186,4 +190,19 @@ module.exports = function (RED) {
 function toMilliseconds(value, unit) {
   const multipliers = { ms: 1, s: 1000, m: 60000, h: 3600000 };
   return value * (multipliers[unit] || 1000);
+}
+
+/**
+ * Parse the methodArgs JSON string into an array of argument objects.
+ *
+ * @param {string} methodArgs - JSON string of [{ dataType, value, typeid? }].
+ * @returns {Array} Array of argument objects.
+ */
+function parseMethodArgs(methodArgs) {
+  try {
+    const args = JSON.parse(methodArgs || "[]");
+    return Array.isArray(args) ? args.filter((a) => a.dataType) : [];
+  } catch {
+    return [];
+  }
 }
