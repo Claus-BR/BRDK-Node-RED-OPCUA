@@ -378,39 +378,15 @@ module.exports = function (RED) {
         // Send a per-item message on output 1 (strip items from output)
         const { items: _items, ...baseMsgRead } = msg;
         for (let i = 0; i < dataValues.length; i++) {
-          const itemMsg = {
-            ...baseMsgRead,
-            topic: items[i].nodeId,
-            datatype: items[i].datatype,
-            browseName: items[i].browseName,
-            payload: converter.toPlainValue(dataValues[i].value?.value),
-            statusCode: dataValues[i].statusCode,
-            sourceTimestamp: dataValues[i].sourceTimestamp,
-            serverTimestamp: dataValues[i].serverTimestamp,
-          };
+          const itemMsg = { ...baseMsgRead, ...converter.buildValueMessage(dataValues[i], items[i]) };
           send([itemMsg, null, null]);
         }
 
         // Send a batch message on output 3
         const batchMsg = {
           topic: "read",
-          items: items.map((item, i) => ({
-            nodeId: item.nodeId,
-            datatype: item.datatype,
-            browseName: item.browseName,
-            value: converter.toPlainValue(dataValues[i].value?.value),
-            statusCode: dataValues[i].statusCode,
-            sourceTimestamp: dataValues[i].sourceTimestamp,
-            serverTimestamp: dataValues[i].serverTimestamp,
-          })),
-          payload: dataValues.map((dv) => ({
-            value: converter.toPlainValue(dv.value?.value),
-            dataType: dv.value?.dataType,
-            arrayType: dv.value?.arrayType,
-            statusCode: dv.statusCode,
-            sourceTimestamp: dv.sourceTimestamp,
-            serverTimestamp: dv.serverTimestamp,
-          })),
+          items: items.map((item, i) => converter.buildValueMessage(dataValues[i], item)),
+          payload: dataValues.map((dv, i) => converter.buildValueMessage(dv, items[i])),
         };
         send([null, null, batchMsg]);
 
@@ -508,17 +484,7 @@ module.exports = function (RED) {
           );
 
           monitoredItem.on("changed", (dataValue) => {
-            const outMsg = {
-              topic: item.nodeId,
-              datatype: item.datatype,
-              browseName: item.browseName,
-              payload: converter.toPlainValue(dataValue.value?.value),
-              statusCode: dataValue.statusCode,
-              serverTimestamp: dataValue.serverTimestamp,
-              sourceTimestamp: dataValue.sourceTimestamp,
-              serverPicoseconds: dataValue.serverPicoseconds,
-              sourcePicoseconds: dataValue.sourcePicoseconds,
-            };
+            const outMsg = converter.buildValueMessage(dataValue, item);
             setSubscribedStatus("value changed");
             node.send([outMsg, null, null]);
           });
@@ -593,15 +559,7 @@ module.exports = function (RED) {
           );
 
           monitoredItem.on("changed", (dataValue) => {
-            const outMsg = {
-              topic: item.nodeId,
-              datatype: item.datatype,
-              browseName: item.browseName,
-              payload: converter.toPlainValue(dataValue.value?.value),
-              statusCode: dataValue.statusCode,
-              serverTimestamp: dataValue.serverTimestamp,
-              sourceTimestamp: dataValue.sourceTimestamp,
-            };
+            const outMsg = converter.buildValueMessage(dataValue, item);
             setSubscribedStatus("value changed");
             node.send([outMsg, null, null]);
           });

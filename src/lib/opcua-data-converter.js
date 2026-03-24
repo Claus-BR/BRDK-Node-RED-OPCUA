@@ -516,4 +516,30 @@ module.exports = {
 
   // Safe serialization
   toPlainValue,
+  // Message builder
+  buildValueMessage,
 };
+
+/**
+ * Build a standardized message object for a value (read, subscribe, monitor).
+ *
+ * Used across read operations and monitored item change events to ensure
+ * consistent message structure throughout the client.
+ *
+ * @param {DataValue} dataValue - The OPC UA DataValue
+ * @param {object} item - The item metadata { nodeId, datatype, browseName }
+ * @returns {object} Standardized message with payload + metadata
+ */
+function buildValueMessage(dataValue, item) {
+  return {
+    topic: item.nodeId,
+    payload: toPlainValue(dataValue.value?.value),
+    datatype: item.datatype,
+    browseName: item.browseName,
+    statusCode: dataValue.statusCode,
+    timestamps: {
+      source: dataValue.sourceTimestamp,
+      server: dataValue.serverTimestamp,
+    },
+  };
+}
