@@ -36,6 +36,7 @@ module.exports = function (RED) {
 
     // ── Events only ─────────────────────────────────────────────────────
     this.customEventFields = config.customEventFields || "";
+    this.eventTypeSelect   = config.eventTypeSelect || "i=2041";
     this.eventTypeIds      = config.eventTypeIds || "";
 
     // ── Browse ──────────────────────────────────────────────────────────
@@ -146,14 +147,22 @@ module.exports = function (RED) {
         }
       }
 
-      // Events: parse event type IDs from comma-separated string
-      if (node.action === "events" && node.eventTypeIds) {
-        const ids = node.eventTypeIds
-          .split(",")
-          .map((id) => id.trim())
-          .filter(Boolean);
-        if (ids.length > 0) {
-          msg.eventTypeIds = msg.eventTypeIds || ids;
+      // Events: resolve event type IDs from dropdown or custom field
+      if (node.action === "events") {
+        if (!msg.eventTypeIds) {
+          if (node.eventTypeSelect === "custom" && node.eventTypeIds) {
+            // Custom: parse comma-separated NodeIds
+            const ids = node.eventTypeIds
+              .split(",")
+              .map((id) => id.trim())
+              .filter(Boolean);
+            if (ids.length > 0) {
+              msg.eventTypeIds = ids;
+            }
+          } else if (node.eventTypeSelect && node.eventTypeSelect !== "custom") {
+            // Standard dropdown selection — single NodeId
+            msg.eventTypeIds = node.eventTypeSelect;
+          }
         }
       }
 
