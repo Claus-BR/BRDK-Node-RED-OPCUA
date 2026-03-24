@@ -387,6 +387,37 @@ function coerceExtensionObject(value) {
 }
 
 /**
+ * Recursively convert a value to a plain JavaScript type for safe serialization.
+ * - Primitives pass through.
+ * - Dates, Buffers, and TypedArrays are returned as-is (Node-RED can handle these).
+ * - Objects with toJSON() are stringified and parsed to avoid circular references.
+ * - Other objects have their own enumerable properties copied recursively.
+ */
+function toPlainValue(value) {
+  if (value === null || value === undefined) return value;
+  const type = typeof value;
+  if (type !== "object" && type !== "function") return value;
+  if (value instanceof Date) return value;
+  if (Buffer.isBuffer(value)) return value;
+  if (ArrayBuffer.isView(value)) return value; // TypedArrays (Int32Array, Float64Array, …)
+  if (Array.isArray(value)) return value.map(toPlainValue);
+
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    const plain = {};
+    for (const key of Object.keys(value)) {
+      try {
+        plain[key] = toPlainValue(value[key]);
+      } catch {
+        plain[key] = null;
+      }
+    }
+    return plain;
+  }
+}
+
+/**
  * Parse a value into an array.
  * - Arrays pass through.
  * - Comma-separated strings are split.
@@ -482,4 +513,33 @@ module.exports = {
   // Time helpers
   toMilliseconds,
   getTimeUnitLabel,
+
+  // Safe serialization
+  toPlainValue,
+  // Message builder
+  buildValueMessage,
 };
+
+/**
+ * Build a standardized message object for a value (read, subscribe, monitor).
+ *
+ * Used across read operations and monitored item change events to ensure
+ * consistent message structure throughout the client.
+ *
+ * @param {DataValue} dataValue - The OPC UA DataValue
+ * @param {object} item - The item metadata { nodeId, datatype, browseName }
+ * @returns {object} Standardized message with payload + metadata
+ */
+function buildValueMessage(dataValue, item) {
+  return {
+    topic: item.nodeId,
+    payload: toPlainValue(dataValue.value?.value),
+    datatype: item.datatype,
+    browseName: item.browseName,
+    statusCode: dataValue.statusCode,
+    timestamps: {
+      source: dataValue.sourceTimestamp,
+      server: dataValue.serverTimestamp,
+    },
+  };
+}
