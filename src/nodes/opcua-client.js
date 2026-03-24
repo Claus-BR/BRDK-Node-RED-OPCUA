@@ -383,7 +383,7 @@ module.exports = function (RED) {
             topic: items[i].nodeId,
             datatype: items[i].datatype,
             browseName: items[i].browseName,
-            payload: dataValues[i].value?.value,
+            payload: converter.toPlainValue(dataValues[i].value?.value),
             statusCode: dataValues[i].statusCode,
             sourceTimestamp: dataValues[i].sourceTimestamp,
             serverTimestamp: dataValues[i].serverTimestamp,
@@ -398,12 +398,19 @@ module.exports = function (RED) {
             nodeId: item.nodeId,
             datatype: item.datatype,
             browseName: item.browseName,
-            value: dataValues[i].value?.value,
+            value: converter.toPlainValue(dataValues[i].value?.value),
             statusCode: dataValues[i].statusCode,
             sourceTimestamp: dataValues[i].sourceTimestamp,
             serverTimestamp: dataValues[i].serverTimestamp,
           })),
-          payload: dataValues,
+          payload: dataValues.map((dv) => ({
+            value: converter.toPlainValue(dv.value?.value),
+            dataType: dv.value?.dataType,
+            arrayType: dv.value?.arrayType,
+            statusCode: dv.statusCode,
+            sourceTimestamp: dv.sourceTimestamp,
+            serverTimestamp: dv.serverTimestamp,
+          })),
         };
         send([null, null, batchMsg]);
 
@@ -505,7 +512,7 @@ module.exports = function (RED) {
               topic: item.nodeId,
               datatype: item.datatype,
               browseName: item.browseName,
-              payload: dataValue.value?.value,
+              payload: converter.toPlainValue(dataValue.value?.value),
               statusCode: dataValue.statusCode,
               serverTimestamp: dataValue.serverTimestamp,
               sourceTimestamp: dataValue.sourceTimestamp,
@@ -590,7 +597,7 @@ module.exports = function (RED) {
               topic: item.nodeId,
               datatype: item.datatype,
               browseName: item.browseName,
-              payload: dataValue.value?.value,
+              payload: converter.toPlainValue(dataValue.value?.value),
               statusCode: dataValue.statusCode,
               serverTimestamp: dataValue.serverTimestamp,
               sourceTimestamp: dataValue.sourceTimestamp,
@@ -960,7 +967,7 @@ module.exports = function (RED) {
           const eventData = {};
           allFields.forEach((fieldName, i) => {
             const variant = eventFields[i];
-            eventData[fieldName] = variant?.value ?? variant;
+            eventData[fieldName] = converter.toPlainValue(variant?.value ?? variant);
           });
 
           const outMsg = {
