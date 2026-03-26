@@ -201,7 +201,8 @@
     },
 
     oneditsave: function () {
-      // Serialize editable list to JSON for storage
+      // Serialize editable list to JSON and write to the hidden input
+      // so Node-RED's auto-sync picks it up as the property value.
       var args = [];
       var items = $("#node-input-methodArgs-list").editableList("items");
       items.each(function () {
@@ -211,7 +212,7 @@
           if (arg) args.push(arg);
         }
       });
-      this.methodArgs = JSON.stringify(args);
+      $("#node-input-methodArgs").val(JSON.stringify(args));
     },
   });
 </script>
