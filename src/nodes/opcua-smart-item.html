@@ -20,6 +20,7 @@
       name:     { value: "" },
       endpoint: { value: "", type: "opcua-endpoint", required: true },
       items:    { value: "[]" },
+      method:   { value: "" },
     },
     inputs: 1,
     outputs: 1,
@@ -90,16 +91,26 @@
       renderItems();
 
       // ── Manual add ─────────────────────────────────────────────────
+      $("#smart-item-manual-isArray").on("change", function () {
+        var checked = $(this).is(":checked");
+        $("#smart-item-array-toggle").toggleClass("active", checked);
+        $("#smart-item-array-toggle .array-toggle-icon.off").toggle(!checked);
+        $("#smart-item-array-toggle .array-toggle-icon.on").toggle(checked);
+      });
+
       $("#smart-item-add-btn").on("click", function () {
         var nodeId = $("#smart-item-manual-nodeId").val().trim();
         if (!nodeId) return;
+        var dt = $("#smart-item-manual-datatype").val() || "";
+        if ($("#smart-item-manual-isArray").is(":checked")) dt += "Array";
         items.push({
           nodeId: nodeId,
-          datatype: $("#smart-item-manual-datatype").val() || "",
+          datatype: dt,
           browseName: "",
           value: "",
         });
         $("#smart-item-manual-nodeId").val("");
+        $("#smart-item-manual-isArray").prop("checked", false).trigger("change");
         renderItems();
       });
 
@@ -123,9 +134,10 @@
         browseNode(endpointId, "ns=0;i=84", $tree, 0);
       });
 
-      function browseNode(endpointId, nodeId, $parent, depth) {
+      function browseNode(endpointId, nodeId, $parent, depth, onEmpty) {
         if (browseCache[nodeId]) {
-          renderChildren(browseCache[nodeId], $parent, endpointId, depth);
+          if (browseCache[nodeId].length === 0 && onEmpty) onEmpty();
+          else renderChildren(browseCache[nodeId], $parent, endpointId, depth, nodeId);
           return;
         }
 
@@ -142,18 +154,20 @@
 
             if (children.length === 0) {
               if (depth === 0) $browseStatus.text("No items found").show();
+              if (onEmpty) onEmpty();
               return;
             }
-            renderChildren(children, $parent, endpointId, depth);
+            renderChildren(children, $parent, endpointId, depth, nodeId);
           })
           .fail(function (xhr) {
             var msg = "Browse failed";
             try { msg = JSON.parse(xhr.responseText).error || msg; } catch(e) {}
             $browseStatus.text(msg).show();
+            if (onEmpty) onEmpty();
           });
       }
 
-      function renderChildren(children, $parent, endpointId, depth) {
+      function renderChildren(children, $parent, endpointId, depth, parentNodeId) {
         children.forEach(function (child) {
           var $node = $('<div class="tree-node" style="padding-left:' + (depth * 18) + 'px;"></div>');
 
@@ -170,7 +184,11 @@
               if (expanded) {
                 $childContainer.show();
                 if ($childContainer.children().length === 0) {
-                  browseNode(endpointId, child.nodeId, $childContainer, depth + 1);
+                  browseNode(endpointId, child.nodeId, $childContainer, depth + 1, function () {
+                    // No children — hide the arrow
+                    $toggle.replaceWith('<span class="tree-toggle-placeholder"></span>');
+                    $childContainer.remove();
+                  });
                 }
               } else {
                 $childContainer.hide();
@@ -182,13 +200,23 @@
             $node.append('<span class="tree-toggle-placeholder"></span>');
           }
 
-          // Icon
-          var iconClass = child.isVariable ? "fa-cube" : "fa-folder";
+          // Icon — differentiate folders, variables, arrays, methods
+          var iconClass = "fa-folder";
+          if (child.isMethod) {
+            iconClass = "fa-cog";
+          } else if (child.isVariable && child.isArray) {
+            iconClass = "fa-th-list";
+          } else if (child.isVariable) {
+            iconClass = "fa-cube";
+          }
           $node.append('<i class="fa ' + iconClass + ' tree-icon"></i>');
 
           // Label
           var label = child.displayName || child.browseName;
-          if (child.dataType) label += ' <span class="tree-datatype">[' + child.dataType + ']</span>';
+          if (child.dataType) {
+            var dtLabel = child.isArray ? child.dataType + 'Array' : child.dataType;
+            label += ' <span class="tree-datatype">[' + dtLabel + ']</span>';
+          }
           var $label = $('<span class="tree-label">' + label + '</span>');
           $node.append($label);
 
@@ -211,13 +239,25 @@
               if (exists) return;
               items.push({
                 nodeId: child.nodeId,
-                datatype: child.dataType || "",
+                datatype: child.dataType ? (child.isArray ? child.dataType + "Array" : child.dataType) : "",
                 browseName: child.displayName || child.browseName,
               });
               renderItems();
               $addBtn.prop("disabled", true).find("i").removeClass("fa-plus").addClass("fa-check");
             });
             $node.append($addBtn);
+          }
+
+          // Set-method button for Method nodes
+          if (child.isMethod) {
+            var $methodBtn = $('<button class="red-ui-button red-ui-button-small tree-add-btn" title="Configure method"><i class="fa fa-cog"></i></button>');
+            (function(c, pId) {
+              $methodBtn.on("click", function (e) {
+                e.stopPropagation();
+                setMethod(c, pId, endpointId);
+              });
+            })(child, parentNodeId);
+            $node.append($methodBtn);
           }
 
           $parent.append($node);
@@ -229,6 +269,187 @@
         });
       }
 
+      // ── Method configuration ───────────────────────────────────────
+      var methodConfig = null;
+      try { methodConfig = JSON.parse(node.method || "null"); } catch(e) {}
+
+      var $methodSection = $("#smart-item-method-section");
+      var $methodInfo = $("#smart-item-method-info");
+      var $methodArgs = $("#smart-item-method-args");
+      var $removeMethodBtn = $("#smart-item-remove-method-btn");
+
+      // Check if a dataType name is an ExtensionObject / structured type
+      // (not one of the built-in scalar types)
+      var SCALAR_TYPES = [
+        "Boolean", "SByte", "Byte", "Int16", "UInt16", "Int32", "UInt32",
+        "Int64", "UInt64", "Float", "Double", "String", "DateTime",
+        "ByteString", "Guid", "XmlElement", "NodeId", "ExpandedNodeId",
+        "StatusCode", "QualifiedName", "LocalizedText",
+      ];
+      function isExtensionObjectType(dtName) {
+        if (!dtName) return false;
+        return !SCALAR_TYPES.includes(dtName);
+      }
+
+      // Fetch ExtensionObject fields from the server
+      function fetchExtensionFields(endpointId, dataTypeNodeId, argIdx) {
+        $.getJSON("opcua-smart-item/type-fields", {
+          endpointId: endpointId,
+          dataTypeNodeId: dataTypeNodeId,
+        })
+          .done(function (data) {
+            if (data.fields && data.fields.length > 0 && methodConfig && methodConfig.inputArguments[argIdx]) {
+              methodConfig.inputArguments[argIdx].fields = data.fields;
+              // Initialize value object with empty strings for each field
+              var val = methodConfig.inputArguments[argIdx].value;
+              if (typeof val !== "object" || val === null) val = {};
+              data.fields.forEach(function (f) {
+                if (val[f.name] === undefined) val[f.name] = "";
+              });
+              methodConfig.inputArguments[argIdx].value = val;
+              renderMethod();
+            }
+          })
+          .fail(function () {
+            // Mark as non-extension so it falls back to a single text input
+            if (methodConfig && methodConfig.inputArguments[argIdx]) {
+              methodConfig.inputArguments[argIdx].isExtensionObject = false;
+              // Reset value from {} to empty string for scalar rendering
+              if (typeof methodConfig.inputArguments[argIdx].value === "object") {
+                methodConfig.inputArguments[argIdx].value = "";
+              }
+              renderMethod();
+            }
+          });
+      }
+
+      function renderMethod() {
+        if (!methodConfig) {
+          $methodSection.hide();
+          $("#smart-item-items-section, #smart-item-manual-section, #smart-item-values-section").show();
+          return;
+        }
+        $methodSection.show();
+        $("#smart-item-items-section, #smart-item-manual-section, #smart-item-values-section").hide();
+        var label = methodConfig.browseName || methodConfig.methodId;
+        $methodInfo.html(
+          '<b>' + label + '</b>' +
+          '<span class="smart-item-method-detail">Object: <code>' + methodConfig.objectId + '</code></span>' +
+          '<span class="smart-item-method-detail">Method: <code>' + methodConfig.methodId + '</code></span>'
+        );
+
+        $methodArgs.empty();
+        var args = methodConfig.inputArguments || [];
+        if (args.length === 0) {
+          $methodArgs.append('<div class="smart-item-values-empty">No input arguments</div>');
+        } else {
+          args.forEach(function (arg, idx) {
+            var $row = $('<div class="smart-item-method-arg-row"></div>');
+            $row.append('<span class="smart-item-method-arg-name">' + (arg.name || 'Arg ' + idx) + '</span>');
+            $row.append('<span class="smart-item-method-arg-type">' + (arg.dataType || '') + '</span>');
+
+            // ExtensionObject: render sub-fields list
+            if (arg.isExtensionObject && arg.fields && arg.fields.length > 0) {
+              var $fieldsContainer = $('<div class="smart-item-ext-fields"></div>');
+              // Initialize value as object if not already
+              if (typeof arg.value !== "object" || arg.value === null) {
+                arg.value = {};
+              }
+              arg.fields.forEach(function (field) {
+                var $fieldRow = $('<div class="smart-item-ext-field-row"></div>');
+                $fieldRow.append('<span class="smart-item-ext-field-name">' + field.name + '</span>');
+                $fieldRow.append('<span class="smart-item-ext-field-type">' + field.dataType + '</span>');
+                var placeholder = (field.defaultValue && typeof field.defaultValue !== 'object') ? String(field.defaultValue) : '';
+                var $fieldInput = $('<input type="text" class="smart-item-ext-field-value" placeholder="' + placeholder + '">');
+                var currentVal = arg.value[field.name];
+                $fieldInput.val((currentVal && typeof currentVal !== 'object') ? currentVal : '');
+                (function(fieldName) {
+                  $fieldInput.on("change", function () {
+                    if (typeof methodConfig.inputArguments[idx].value !== "object") {
+                      methodConfig.inputArguments[idx].value = {};
+                    }
+                    methodConfig.inputArguments[idx].value[fieldName] = $(this).val();
+                  });
+                })(field.name);
+                $fieldRow.append($fieldInput);
+                $fieldsContainer.append($fieldRow);
+              });
+              $row.append($fieldsContainer);
+            } else if (arg.isExtensionObject && (!arg.fields || arg.fields.length === 0)) {
+              // ExtensionObject but fields not yet loaded — show loading
+              $row.append('<span class="smart-item-method-loading">&nbsp;loading fields…</span>');
+            } else {
+              // Scalar: single value input
+              var $input = $('<input type="text" class="smart-item-method-arg-value" placeholder="Value">');
+              var scalarVal = (arg.value && typeof arg.value !== 'object') ? arg.value : '';
+              $input.val(scalarVal);
+              $input.on("change", function () {
+                methodConfig.inputArguments[idx].value = $(this).val();
+              });
+              $row.append($input);
+            }
+
+            $methodArgs.append($row);
+          });
+        }
+      }
+
+      function setMethod(child, parentNodeId, endpointId) {
+        methodConfig = {
+          objectId: parentNodeId,
+          methodId: child.nodeId,
+          browseName: child.displayName || child.browseName,
+          inputArguments: [],
+        };
+        renderMethod();
+
+        // Fetch InputArguments from the server
+        $methodInfo.append('<span class="smart-item-method-loading"> — fetching arguments…</span>');
+        $.getJSON("opcua-smart-item/method-args", {
+          endpointId: endpointId,
+          methodId: child.nodeId,
+        })
+          .done(function (data) {
+            $(".smart-item-method-loading").remove();
+            if (data.inputArguments && data.inputArguments.length > 0) {
+              methodConfig.inputArguments = data.inputArguments.map(function (a) {
+                var isExt = isExtensionObjectType(a.dataType);
+                return {
+                  name: a.name,
+                  dataType: a.dataType,
+                  dataTypeNodeId: a.dataTypeNodeId || "",
+                  description: a.description,
+                  valueRank: a.valueRank,
+                  isExtensionObject: isExt,
+                  fields: [],
+                  value: isExt ? {} : "",
+                };
+              });
+              renderMethod();
+
+              // For each ExtensionObject arg, fetch its fields
+              methodConfig.inputArguments.forEach(function (arg, idx) {
+                if (arg.isExtensionObject && arg.dataTypeNodeId) {
+                  fetchExtensionFields(endpointId, arg.dataTypeNodeId, idx);
+                }
+              });
+            } else {
+              renderMethod();
+            }
+          })
+          .fail(function () {
+            $(".smart-item-method-loading").text(" — could not fetch arguments");
+          });
+      }
+
+      $removeMethodBtn.on("click", function () {
+        methodConfig = null;
+        renderMethod();
+      });
+
+      renderMethod();
+      node._methodConfig = function () { return methodConfig; };
+
     },
 
     oneditsave: function () {
@@ -236,6 +457,8 @@
         var json = JSON.stringify(this._smartItems);
         $("#node-input-items").val(json);
       }
+      var mc = this._methodConfig ? this._methodConfig() : null;
+      $("#node-input-method").val(mc ? JSON.stringify(mc) : "");
     },
   });
 </script>
@@ -346,14 +569,75 @@
     text-align: center;
   }
 
-  /* ── Manual add row ─────────────────────────────────────────────── */
-  .smart-item-add-row {
-    display: flex;
-    gap: 4px;
+  /* ── Manual add ───────────────────────────────────────────────── */
+  .smart-item-add-card {
+    border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+    border-radius: 4px;
+    padding: 8px;
     margin-bottom: 12px;
+    background: var(--red-ui-form-input-background-color, #fff);
   }
-  .smart-item-add-row input { flex: 1; }
-  .smart-item-add-row select { width: 100px; }
+  .smart-item-add-field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .smart-item-add-field:last-child {
+    margin-bottom: 0;
+  }
+  .smart-item-add-field label.field-label {
+    font-size: 12px;
+    color: var(--red-ui-text-color-info, #888);
+    width: 55px;
+    flex-shrink: 0;
+    margin: 0;
+    text-align: right;
+  }
+  .smart-item-add-field input[type="text"],
+  .smart-item-add-field select {
+    flex: 1;
+    font-size: 13px;
+  }
+  .smart-item-add-field .array-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    font-size: 11px;
+    cursor: pointer;
+    margin: 0;
+    flex-shrink: 0;
+    padding: 4px 8px;
+    border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+    border-radius: 3px;
+    background: var(--red-ui-form-input-background-color, #fff);
+    color: var(--red-ui-text-color-info, #888);
+    user-select: none;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .smart-item-add-field .array-toggle:hover {
+    border-color: var(--red-ui-text-color-info, #999);
+  }
+  .smart-item-add-field .array-toggle.active {
+    background: var(--red-ui-node-config-color, #d1e0f0);
+    border-color: var(--red-ui-text-color-link, #4b8bbf);
+    color: var(--red-ui-text-color, #333);
+    font-weight: 500;
+  }
+  .smart-item-add-field .array-toggle input[type="checkbox"] {
+    display: none;
+  }
+  .smart-item-add-field .array-toggle .array-toggle-icon {
+    margin-right: 3px;
+    font-size: 10px;
+  }
+  .smart-item-add-field .array-toggle .array-toggle-icon.off {
+    color: var(--red-ui-text-color-error, #c33);
+  }
+  .smart-item-add-field .array-toggle .array-toggle-icon.on {
+    color: #3a3;
+  }
 
   /* ── Tree browser ───────────────────────────────────────────────── */
   #smart-item-tree-container {
@@ -420,6 +704,8 @@
     flex-shrink: 0;
   }
   .tree-icon.fa-cube { color: #3FADB5; }
+  .tree-icon.fa-th-list { color: #3FADB5; }
+  .tree-icon.fa-cog { color: #9b59b6; }
   .tree-icon.fa-folder { color: #d4a017; }
   .tree-label {
     flex: 1;
@@ -456,6 +742,114 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  /* ── Method section ───────────────────────────────────────────── */
+  .smart-item-method-info {
+    border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+    border-radius: 4px 4px 0 0;
+    padding: 8px;
+    background: var(--red-ui-secondary-background-color, #f7f7f7);
+    font-size: 12px;
+    margin-bottom: 0;
+  }
+  .smart-item-method-info b {
+    font-size: 13px;
+  }
+  .smart-item-method-detail {
+    display: block;
+    font-size: 11px;
+    color: var(--red-ui-text-color-info, #888);
+    margin-top: 2px;
+  }
+  .smart-item-method-detail code {
+    font-family: monospace;
+    font-size: 11px;
+  }
+  .smart-item-method-loading {
+    color: var(--red-ui-text-color-info, #888);
+    font-style: italic;
+    font-size: 11px;
+  }
+  #smart-item-method-args {
+    border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    max-height: 400px;
+    overflow-y: auto;
+    background: var(--red-ui-form-input-background-color, #fff);
+  }
+  .smart-item-method-arg-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);
+    font-size: 12px;
+    gap: 4px 8px;
+  }
+  .smart-item-method-arg-row:last-child { border-bottom: none; }
+  .smart-item-method-arg-name {
+    font-weight: 500;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .smart-item-method-arg-type {
+    color: var(--red-ui-text-color-info, #888);
+    font-size: 11px;
+    width: 90px;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .smart-item-method-arg-value {
+    flex: 1;
+    min-width: 60px;
+    padding: 2px 6px;
+    font-size: 12px;
+    border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+    border-radius: 3px;
+    background: var(--red-ui-form-input-background-color, #fff);
+  }
+
+  /* ── ExtensionObject sub-fields ───────────────────────────────── */
+  .smart-item-ext-fields {
+    flex-basis: 100%;
+    margin-top: 2px;
+    padding: 4px 0 4px 12px;
+  }
+  .smart-item-ext-field-row {
+    display: flex;
+    align-items: center;
+    padding: 2px 0;
+    font-size: 11px;
+    gap: 6px;
+  }
+  .smart-item-ext-field-name {
+    font-weight: 500;
+    width: 88px;
+    flex-shrink: 0;
+    font-family: monospace;
+    font-size: 11px;
+  }
+  .smart-item-ext-field-type {
+    color: var(--red-ui-text-color-info, #999);
+    font-size: 10px;
+    width: 70px;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .smart-item-ext-field-value {
+    flex: 1;
+    min-width: 60px;
+    padding: 2px 6px;
+    font-size: 11px;
+    border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+    border-radius: 3px;
+    background: var(--red-ui-form-input-background-color, #fff);
+  }
 </style>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
@@ -477,45 +871,68 @@
 
   <!-- Hidden items JSON storage -->
   <input type="hidden" id="node-input-items">
+  <input type="hidden" id="node-input-method">
 
   <!-- Items list -->
-  <div class="form-row">
+  <div class="form-row" id="smart-item-items-section">
     <label style="width: 100%; margin-bottom: 4px;"><i class="fa fa-list"></i> Items</label>
     <div id="smart-item-list"></div>
   </div>
 
   <!-- Manual add -->
-  <div class="form-row">
+  <div class="form-row" id="smart-item-manual-section">
     <label style="width: 100%; margin-bottom: 4px;"><i class="fa fa-plus-circle"></i> Add manually</label>
-    <div class="smart-item-add-row">
-      <input type="text" id="smart-item-manual-nodeId" placeholder="ns=2;s=MyVariable">
-      <select id="smart-item-manual-datatype">
-        <option value="Boolean" selected>Boolean</option>
-        <option value="SByte">SByte</option>
-        <option value="Byte">Byte</option>
-        <option value="Int16">Int16</option>
-        <option value="Int32">Int32</option>
-        <option value="Int64">Int64</option>
-        <option value="UInt16">UInt16</option>
-        <option value="UInt32">UInt32</option>
-        <option value="UInt64">UInt64</option>
-        <option value="Float">Float</option>
-        <option value="Double" >Double</option>
-        <option value="String">String</option>
-        <option value="DateTime">DateTime</option>
-        <option value="ByteString">ByteString</option>
-        <option value="NodeId">NodeId</option>
-        <option value="LocalizedText">LocalizedText</option>
-        <option value="ExtensionObject">ExtensionObject</option>
-      </select>
-      <button class="red-ui-button" id="smart-item-add-btn"><i class="fa fa-plus"></i></button>
+    <div class="smart-item-add-card">
+      <div class="smart-item-add-field">
+        <label class="field-label">NodeId</label>
+        <input type="text" id="smart-item-manual-nodeId" placeholder="ns=2;s=MyVariable">
+      </div>
+      <div class="smart-item-add-field">
+        <label class="field-label">Type</label>
+        <select id="smart-item-manual-datatype">
+          <option value="" selected disabled hidden>Choose Datatype</option>
+          <option value="Boolean">Boolean</option>
+          <option value="SByte">SByte</option>
+          <option value="Byte">Byte</option>
+          <option value="Int16">Int16</option>
+          <option value="Int32">Int32</option>
+          <option value="Int64">Int64</option>
+          <option value="UInt16">UInt16</option>
+          <option value="UInt32">UInt32</option>
+          <option value="UInt64">UInt64</option>
+          <option value="Float">Float</option>
+          <option value="Double">Double</option>
+          <option value="String">String</option>
+          <option value="DateTime">DateTime</option>
+          <option value="ByteString">ByteString</option>
+          <option value="NodeId">NodeId</option>
+          <option value="LocalizedText">LocalizedText</option>
+          <option value="ExtensionObject">ExtensionObject</option>
+        </select>
+        <label class="array-toggle" id="smart-item-array-toggle">
+          <input type="checkbox" id="smart-item-manual-isArray"><i class="fa fa-times array-toggle-icon off"></i><i class="fa fa-check array-toggle-icon on" style="display:none;"></i> Array
+        </label>
+        <button class="red-ui-button" id="smart-item-add-btn" title="Add item"><i class="fa fa-plus"></i></button>
+      </div>
     </div>
   </div>
 
   <!-- Values list -->
-  <div class="form-row">
+  <div class="form-row" id="smart-item-values-section">
     <label style="width: 100%; margin-bottom: 4px;"><i class="fa fa-pencil"></i> Values <span style="font-weight:normal; font-size:11px; color:#888;"> (for write operations)</span></label>
     <div id="smart-item-values-list"></div>
+  </div>
+
+  <!-- Method configuration (shown when a method is selected from the tree) -->
+  <div class="form-row" id="smart-item-method-section" style="display: none;">
+    <label style="width: 100%; margin-bottom: 4px;">
+      <i class="fa fa-cog"></i> Method
+      <button class="red-ui-button red-ui-button-small" id="smart-item-remove-method-btn" style="margin-left: 8px;" title="Remove method">
+        <i class="fa fa-times"></i> Remove
+      </button>
+    </label>
+    <div id="smart-item-method-info" class="smart-item-method-info"></div>
+    <div id="smart-item-method-args"></div>
   </div>
 
   <!-- Tree browser -->

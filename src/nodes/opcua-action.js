@@ -36,6 +36,7 @@ module.exports = function (RED) {
 
     // ── Events only ─────────────────────────────────────────────────────
     this.customEventFields = config.customEventFields || "";
+    this.eventTypeSelect   = config.eventTypeSelect || "i=2041";
     this.eventTypeIds      = config.eventTypeIds || "";
 
     // ── Browse ──────────────────────────────────────────────────────────
@@ -56,6 +57,8 @@ module.exports = function (RED) {
     this.comment = config.comment || "Acknowledged from Node-RED";
 
     // ── Method ──────────────────────────────────────────────────────────
+    // objectId, methodId, and inputArguments are configured on the Smart Item node.
+    // The action node preserves any on-msg overrides for backward compatibility.
     this.objectId = config.objectId || "";
     this.methodId = config.methodId || "";
 
@@ -146,14 +149,22 @@ module.exports = function (RED) {
         }
       }
 
-      // Events: parse event type IDs from comma-separated string
-      if (node.action === "events" && node.eventTypeIds) {
-        const ids = node.eventTypeIds
-          .split(",")
-          .map((id) => id.trim())
-          .filter(Boolean);
-        if (ids.length > 0) {
-          msg.eventTypeIds = msg.eventTypeIds || ids;
+      // Events: resolve event type IDs from dropdown or custom field
+      if (node.action === "events") {
+        if (!msg.eventTypeIds) {
+          if (node.eventTypeSelect === "custom" && node.eventTypeIds) {
+            // Custom: parse comma-separated NodeIds
+            const ids = node.eventTypeIds
+              .split(",")
+              .map((id) => id.trim())
+              .filter(Boolean);
+            if (ids.length > 0) {
+              msg.eventTypeIds = ids;
+            }
+          } else if (node.eventTypeSelect && node.eventTypeSelect !== "custom") {
+            // Standard dropdown selection — single NodeId
+            msg.eventTypeIds = node.eventTypeSelect;
+          }
         }
       }
 

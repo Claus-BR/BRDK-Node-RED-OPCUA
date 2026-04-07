@@ -1155,12 +1155,25 @@ module.exports = function (RED) {
         const objectId = opcua.coerceNodeId(msg.objectId);
         const methodId = opcua.coerceNodeId(msg.methodId);
 
-        // Build input arguments
-        const inputArgs = (msg.inputArguments || []).map((arg) => {
+        // Build input arguments (supports ExtensionObject with typeid)
+        const inputArgs = [];
+        for (const arg of (msg.inputArguments || [])) {
           const dataType = converter.toOpcuaDataType(arg.dataType);
-          const value = converter.coerceScalarValue(arg.dataType, arg.value);
-          return new opcua.Variant({ dataType, value });
-        });
+          let value;
+
+          if (arg.dataType === "ExtensionObject" && arg.typeid) {
+            // Construct a schema-aware ExtensionObject via the session
+            const rawVal = typeof arg.value === "string" ? JSON.parse(arg.value) : (arg.value || {});
+            value = await node.session.constructExtensionObject(
+              opcua.coerceNodeId(arg.typeid),
+              rawVal,
+            );
+          } else {
+            value = converter.coerceScalarValue(arg.dataType, arg.value);
+          }
+
+          inputArgs.push(new opcua.Variant({ dataType, value }));
+        }
 
         const callRequest = new opcua.CallMethodRequest({
           objectId,

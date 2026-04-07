@@ -26,10 +26,8 @@
       deadbandvalue:       { value: 1 },
       // Events only
       customEventFields:   { value: "" },
-      // Browse
-      collect:             { value: false },
-      maxDepth:            { value: 1 },
       // Events
+      eventTypeSelect:     { value: "i=2041" },
       eventTypeIds:        { value: "" },
       // Browse
       collect:             { value: false },
@@ -43,7 +41,7 @@
       historyRangeUnit:    { value: "h" },
       // Acknowledge
       comment:             { value: "Acknowledged from Node-RED" },
-      // Method
+      // Method (objectId/methodId/args now configured on Smart Item node)
       objectId:            { value: "" },
       methodId:            { value: "" },
       // Connect / Reconnect
@@ -103,6 +101,11 @@
         $(".action-deadband-row").toggle(isMonitor);
         $(".action-eventfields-row").toggle(isEvents);
         $(".action-eventtypes-row").toggle(isEvents);
+        if (isEvents) {
+          updateEventTypeCustom();
+        } else {
+          $(".action-eventtypes-custom-row").toggle(false);
+        }
         $(".action-browse-row").toggle(isBrowse);
         $(".action-history-row").toggle(isHistory);
         $(".action-history-aggregate-row").toggle(isHistory);
@@ -119,6 +122,19 @@
           $(".action-history-processing-row").toggle(false);
         }
       }
+
+      // ── Method arguments: dynamic editable list ─────────────────
+      // ── Event type dropdown: toggle custom text field ──────────────
+      function updateEventTypeCustom() {
+        var sel = $("#node-input-eventTypeSelect").val();
+        $(".action-eventtypes-custom-row").toggle(sel === "custom");
+      }
+      $("#node-input-eventTypeSelect").on("change", updateEventTypeCustom);
+
+      // Restore "Custom" selection if eventTypeIds has a non-standard value
+      var storedSelect = this.eventTypeSelect || "i=2041";
+      $("#node-input-eventTypeSelect").val(storedSelect);
+      updateEventTypeCustom();
 
       $("#node-input-action").on("change", updateVisibility);
       $("#node-input-aggregate").on("change", updateVisibility);
@@ -199,10 +215,24 @@
     <input type="text" id="node-input-customEventFields" placeholder="Field1, Field2, ...">
   </div>
 
-  <!-- ── Events: Event Type IDs ──────────────────────────────────────── -->
+  <!-- ── Events: Event Type Select ───────────────────────────────────── -->
   <div class="form-row action-eventtypes-row" style="display: none;">
-    <label for="node-input-eventTypeIds"><i class="fa fa-filter"></i> Event Types</label>
-    <input type="text" id="node-input-eventTypeIds" placeholder="i=2041 (default: BaseEventType)">
+    <label for="node-input-eventTypeSelect"><i class="fa fa-bell"></i> Event Type</label>
+    <select id="node-input-eventTypeSelect" style="width: 60%;">
+      <option value="i=2041">BaseEvent (all events)</option>
+      <option value="i=2052">AuditEvent</option>
+      <option value="i=2132">BaseModelChangeEvent</option>
+      <option value="i=2782">ConditionType</option>
+      <option value="i=3035">Event Queue Overflow</option>
+      <option value="i=11436">ProgressEvent</option>
+      <option value="i=2130">SystemEvent</option>
+      <option value="custom">Custom…</option>
+    </select>
+  </div>
+  <!-- ── Events: Custom Event Type IDs (shown when "Custom" is selected) ── -->
+  <div class="form-row action-eventtypes-custom-row" style="display: none;">
+    <label for="node-input-eventTypeIds"><i class="fa fa-filter"></i> Event Type IDs</label>
+    <input type="text" id="node-input-eventTypeIds" placeholder="i=2041, ns=2;i=5001 (comma-separated)">
   </div>
 
   <!-- ── Browse: Collect Mode ────────────────────────────────────────── -->
@@ -266,14 +296,13 @@
     <input type="text" id="node-input-comment" placeholder="Acknowledged from Node-RED">
   </div>
 
-  <!-- ── Method: Object & Method IDs ─────────────────────────────────── -->
+  <!-- ── Method: note ──────────────────────────────────────────────────── -->
   <div class="form-row action-method-row" style="display: none;">
-    <label for="node-input-objectId"><i class="fa fa-cube"></i> Object ID</label>
-    <input type="text" id="node-input-objectId" placeholder="ns=2;s=MyObject">
-  </div>
-  <div class="form-row action-method-row" style="display: none;">
-    <label for="node-input-methodId"><i class="fa fa-cog"></i> Method ID</label>
-    <input type="text" id="node-input-methodId" placeholder="ns=2;s=MyMethod">
+    <div style="padding: 8px; background: var(--red-ui-secondary-background-color, #f7f7f7); border: 1px solid var(--red-ui-form-input-border-color, #ccc); border-radius: 4px; font-size: 12px; color: var(--red-ui-text-color-info, #666);">
+      <i class="fa fa-info-circle"></i>
+      Configure the method (objectId, methodId, input arguments) on the <b>Smart Item</b> node.
+      The Smart Item's tree browser auto-detects methods and fetches their argument definitions.
+    </div>
   </div>
 
   <!-- ── Connect / Reconnect: Endpoint URL ─────────────────────────── -->
