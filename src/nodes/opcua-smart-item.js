@@ -483,17 +483,35 @@ module.exports = function (RED) {
           if (key.startsWith("_") || key === "schema" || key === "encodingDefaultBinary" || key === "encodingDefaultXml") continue;
 
           let fieldType = "String";
-          if (typeof val === "number") fieldType = "Double";
-          else if (typeof val === "boolean") fieldType = "Boolean";
-          else if (val instanceof Date) fieldType = "DateTime";
-          else if (val && val.constructor?.name === "NodeId") fieldType = "NodeId";
-          else if (typeof val === "string") fieldType = "String";
-          else if (val === null || val === undefined) fieldType = "String";
+          let defaultVal = "";
+          if (typeof val === "number") {
+            fieldType = "Double";
+            defaultVal = String(val);
+          } else if (typeof val === "boolean") {
+            fieldType = "Boolean";
+            defaultVal = String(val);
+          } else if (val instanceof Date) {
+            fieldType = "DateTime";
+            defaultVal = val.toISOString();
+          } else if (val && val.constructor?.name === "NodeId") {
+            fieldType = "NodeId";
+            defaultVal = val.toString();
+          } else if (typeof val === "string") {
+            fieldType = "String";
+            defaultVal = val;
+          } else if (val && typeof val === "object" && typeof val.value === "number") {
+            // Enum types (e.g. ServerState) have a numeric .value
+            fieldType = val.constructor?.name || "Enum";
+            defaultVal = String(val.value);
+          } else if (val && typeof val === "object") {
+            fieldType = val.constructor?.name || "Object";
+            defaultVal = "";
+          }
 
           fields.push({
             name: key,
             dataType: fieldType,
-            defaultValue: (val !== null && val !== undefined) ? String(val) : "",
+            defaultValue: defaultVal,
           });
         }
       }

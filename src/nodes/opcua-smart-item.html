@@ -91,16 +91,26 @@
       renderItems();
 
       // ── Manual add ─────────────────────────────────────────────────
+      $("#smart-item-manual-isArray").on("change", function () {
+        var checked = $(this).is(":checked");
+        $("#smart-item-array-toggle").toggleClass("active", checked);
+        $("#smart-item-array-toggle .array-toggle-icon.off").toggle(!checked);
+        $("#smart-item-array-toggle .array-toggle-icon.on").toggle(checked);
+      });
+
       $("#smart-item-add-btn").on("click", function () {
         var nodeId = $("#smart-item-manual-nodeId").val().trim();
         if (!nodeId) return;
+        var dt = $("#smart-item-manual-datatype").val() || "";
+        if ($("#smart-item-manual-isArray").is(":checked")) dt += "Array";
         items.push({
           nodeId: nodeId,
-          datatype: $("#smart-item-manual-datatype").val() || "",
+          datatype: dt,
           browseName: "",
           value: "",
         });
         $("#smart-item-manual-nodeId").val("");
+        $("#smart-item-manual-isArray").prop("checked", false).trigger("change");
         renderItems();
       });
 
@@ -304,6 +314,10 @@
             // Mark as non-extension so it falls back to a single text input
             if (methodConfig && methodConfig.inputArguments[argIdx]) {
               methodConfig.inputArguments[argIdx].isExtensionObject = false;
+              // Reset value from {} to empty string for scalar rendering
+              if (typeof methodConfig.inputArguments[argIdx].value === "object") {
+                methodConfig.inputArguments[argIdx].value = "";
+              }
               renderMethod();
             }
           });
@@ -312,9 +326,11 @@
       function renderMethod() {
         if (!methodConfig) {
           $methodSection.hide();
+          $("#smart-item-items-section, #smart-item-manual-section, #smart-item-values-section").show();
           return;
         }
         $methodSection.show();
+        $("#smart-item-items-section, #smart-item-manual-section, #smart-item-values-section").hide();
         var label = methodConfig.browseName || methodConfig.methodId;
         $methodInfo.html(
           '<b>' + label + '</b>' +
@@ -343,8 +359,10 @@
                 var $fieldRow = $('<div class="smart-item-ext-field-row"></div>');
                 $fieldRow.append('<span class="smart-item-ext-field-name">' + field.name + '</span>');
                 $fieldRow.append('<span class="smart-item-ext-field-type">' + field.dataType + '</span>');
-                var $fieldInput = $('<input type="text" class="smart-item-ext-field-value" placeholder="' + (field.defaultValue || '') + '">');
-                $fieldInput.val(arg.value[field.name] || '');
+                var placeholder = (field.defaultValue && typeof field.defaultValue !== 'object') ? String(field.defaultValue) : '';
+                var $fieldInput = $('<input type="text" class="smart-item-ext-field-value" placeholder="' + placeholder + '">');
+                var currentVal = arg.value[field.name];
+                $fieldInput.val((currentVal && typeof currentVal !== 'object') ? currentVal : '');
                 (function(fieldName) {
                   $fieldInput.on("change", function () {
                     if (typeof methodConfig.inputArguments[idx].value !== "object") {
@@ -363,7 +381,8 @@
             } else {
               // Scalar: single value input
               var $input = $('<input type="text" class="smart-item-method-arg-value" placeholder="Value">');
-              $input.val(arg.value || '');
+              var scalarVal = (arg.value && typeof arg.value !== 'object') ? arg.value : '';
+              $input.val(scalarVal);
               $input.on("change", function () {
                 methodConfig.inputArguments[idx].value = $(this).val();
               });
@@ -550,14 +569,75 @@
     text-align: center;
   }
 
-  /* ── Manual add row ─────────────────────────────────────────────── */
-  .smart-item-add-row {
-    display: flex;
-    gap: 4px;
+  /* ── Manual add ───────────────────────────────────────────────── */
+  .smart-item-add-card {
+    border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+    border-radius: 4px;
+    padding: 8px;
     margin-bottom: 12px;
+    background: var(--red-ui-form-input-background-color, #fff);
   }
-  .smart-item-add-row input { flex: 1; }
-  .smart-item-add-row select { width: 100px; }
+  .smart-item-add-field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .smart-item-add-field:last-child {
+    margin-bottom: 0;
+  }
+  .smart-item-add-field label.field-label {
+    font-size: 12px;
+    color: var(--red-ui-text-color-info, #888);
+    width: 55px;
+    flex-shrink: 0;
+    margin: 0;
+    text-align: right;
+  }
+  .smart-item-add-field input[type="text"],
+  .smart-item-add-field select {
+    flex: 1;
+    font-size: 13px;
+  }
+  .smart-item-add-field .array-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    font-size: 11px;
+    cursor: pointer;
+    margin: 0;
+    flex-shrink: 0;
+    padding: 4px 8px;
+    border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+    border-radius: 3px;
+    background: var(--red-ui-form-input-background-color, #fff);
+    color: var(--red-ui-text-color-info, #888);
+    user-select: none;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .smart-item-add-field .array-toggle:hover {
+    border-color: var(--red-ui-text-color-info, #999);
+  }
+  .smart-item-add-field .array-toggle.active {
+    background: var(--red-ui-node-config-color, #d1e0f0);
+    border-color: var(--red-ui-text-color-link, #4b8bbf);
+    color: var(--red-ui-text-color, #333);
+    font-weight: 500;
+  }
+  .smart-item-add-field .array-toggle input[type="checkbox"] {
+    display: none;
+  }
+  .smart-item-add-field .array-toggle .array-toggle-icon {
+    margin-right: 3px;
+    font-size: 10px;
+  }
+  .smart-item-add-field .array-toggle .array-toggle-icon.off {
+    color: var(--red-ui-text-color-error, #c33);
+  }
+  .smart-item-add-field .array-toggle .array-toggle-icon.on {
+    color: #3a3;
+  }
 
   /* ── Tree browser ───────────────────────────────────────────────── */
   #smart-item-tree-container {
@@ -694,7 +774,7 @@
     border: 1px solid var(--red-ui-form-input-border-color, #ccc);
     border-top: none;
     border-radius: 0 0 4px 4px;
-    max-height: 200px;
+    max-height: 400px;
     overflow-y: auto;
     background: var(--red-ui-form-input-background-color, #fff);
   }
@@ -710,19 +790,21 @@
   .smart-item-method-arg-row:last-child { border-bottom: none; }
   .smart-item-method-arg-name {
     font-weight: 500;
-    min-width: 80px;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
   .smart-item-method-arg-type {
     color: var(--red-ui-text-color-info, #888);
     font-size: 11px;
-    min-width: 50px;
-    max-width: 120px;
+    width: 90px;
+    flex-shrink: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .smart-item-method-arg-value {
     flex: 1;
+    min-width: 60px;
     padding: 2px 6px;
     font-size: 12px;
     border: 1px solid var(--red-ui-form-input-border-color, #ccc);
@@ -745,17 +827,23 @@
   }
   .smart-item-ext-field-name {
     font-weight: 500;
-    min-width: 90px;
+    width: 88px;
+    flex-shrink: 0;
     font-family: monospace;
     font-size: 11px;
   }
   .smart-item-ext-field-type {
     color: var(--red-ui-text-color-info, #999);
     font-size: 10px;
-    min-width: 50px;
+    width: 70px;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .smart-item-ext-field-value {
     flex: 1;
+    min-width: 60px;
     padding: 2px 6px;
     font-size: 11px;
     border: 1px solid var(--red-ui-form-input-border-color, #ccc);
@@ -786,41 +874,50 @@
   <input type="hidden" id="node-input-method">
 
   <!-- Items list -->
-  <div class="form-row">
+  <div class="form-row" id="smart-item-items-section">
     <label style="width: 100%; margin-bottom: 4px;"><i class="fa fa-list"></i> Items</label>
     <div id="smart-item-list"></div>
   </div>
 
   <!-- Manual add -->
-  <div class="form-row">
+  <div class="form-row" id="smart-item-manual-section">
     <label style="width: 100%; margin-bottom: 4px;"><i class="fa fa-plus-circle"></i> Add manually</label>
-    <div class="smart-item-add-row">
-      <input type="text" id="smart-item-manual-nodeId" placeholder="ns=2;s=MyVariable">
-      <select id="smart-item-manual-datatype">
-        <option value="Boolean" selected>Boolean</option>
-        <option value="SByte">SByte</option>
-        <option value="Byte">Byte</option>
-        <option value="Int16">Int16</option>
-        <option value="Int32">Int32</option>
-        <option value="Int64">Int64</option>
-        <option value="UInt16">UInt16</option>
-        <option value="UInt32">UInt32</option>
-        <option value="UInt64">UInt64</option>
-        <option value="Float">Float</option>
-        <option value="Double" >Double</option>
-        <option value="String">String</option>
-        <option value="DateTime">DateTime</option>
-        <option value="ByteString">ByteString</option>
-        <option value="NodeId">NodeId</option>
-        <option value="LocalizedText">LocalizedText</option>
-        <option value="ExtensionObject">ExtensionObject</option>
-      </select>
-      <button class="red-ui-button" id="smart-item-add-btn"><i class="fa fa-plus"></i></button>
+    <div class="smart-item-add-card">
+      <div class="smart-item-add-field">
+        <label class="field-label">NodeId</label>
+        <input type="text" id="smart-item-manual-nodeId" placeholder="ns=2;s=MyVariable">
+      </div>
+      <div class="smart-item-add-field">
+        <label class="field-label">Type</label>
+        <select id="smart-item-manual-datatype">
+          <option value="Boolean" selected>Boolean</option>
+          <option value="SByte">SByte</option>
+          <option value="Byte">Byte</option>
+          <option value="Int16">Int16</option>
+          <option value="Int32">Int32</option>
+          <option value="Int64">Int64</option>
+          <option value="UInt16">UInt16</option>
+          <option value="UInt32">UInt32</option>
+          <option value="UInt64">UInt64</option>
+          <option value="Float">Float</option>
+          <option value="Double">Double</option>
+          <option value="String">String</option>
+          <option value="DateTime">DateTime</option>
+          <option value="ByteString">ByteString</option>
+          <option value="NodeId">NodeId</option>
+          <option value="LocalizedText">LocalizedText</option>
+          <option value="ExtensionObject">ExtensionObject</option>
+        </select>
+        <label class="array-toggle" id="smart-item-array-toggle">
+          <input type="checkbox" id="smart-item-manual-isArray"><i class="fa fa-times array-toggle-icon off"></i><i class="fa fa-check array-toggle-icon on" style="display:none;"></i> Array
+        </label>
+        <button class="red-ui-button" id="smart-item-add-btn" title="Add item"><i class="fa fa-plus"></i></button>
+      </div>
     </div>
   </div>
 
   <!-- Values list -->
-  <div class="form-row">
+  <div class="form-row" id="smart-item-values-section">
     <label style="width: 100%; margin-bottom: 4px;"><i class="fa fa-pencil"></i> Values <span style="font-weight:normal; font-size:11px; color:#888;"> (for write operations)</span></label>
     <div id="smart-item-values-list"></div>
   </div>
