@@ -92,6 +92,7 @@ module.exports = function (RED) {
     this.client       = null;          // OPCUAClient instance
     this.session      = null;          // ClientSession instance
     this.subscriptions  = new Map();   // configId → { subscription, monitoredItems: Map<nodeId, entry> }
+    this.subscriptionRegistry = [];    // Stored subscription params for re-subscribe after reconnection
     this.cmdQueue       = [];          // Messages queued while connecting
     this.currentStatus  = "";
     this.hasConnected   = false;
@@ -256,7 +257,14 @@ module.exports = function (RED) {
 
         // If session was lost, re-create it
         if (!node.session) {
-          connectAndCreateSession().catch(handleConnectionError);
+          connectAndCreateSession()
+            .then(() => resubscribeAll())
+            .catch(handleConnectionError);
+        } else {
+          // Session still exists but subscriptions may have been lost
+          // (e.g. server restarted and cleared all subscriptions).
+          // Re-establish all registered subscriptions.
+          resubscribeAll();
         }
       });
 
@@ -496,6 +504,7 @@ module.exports = function (RED) {
           subItems.set(item.nodeId, monitoredItem);
         }
 
+        registerSubscription("subscribe", msg, items);
         setSubscribedStatus("ready");
         done();
       } catch (err) {
@@ -571,6 +580,7 @@ module.exports = function (RED) {
           subItems.set(item.nodeId, monitoredItem);
         }
 
+        registerSubscription("monitor", msg, items);
         setSubscribedStatus("ready");
         done();
       } catch (err) {
@@ -618,6 +628,17 @@ module.exports = function (RED) {
       }
 
       msg.payload = `Unsubscribed ${count} item(s)`;
+
+      // Unregister from re-subscription registry
+      const unsubNodeIds = items.map(i => i.nodeId);
+      if (subConfigId) {
+        unregisterSubscription(subConfigId, unsubNodeIds);
+      } else {
+        // Remove from all subscription configs
+        for (const [configId] of node.subscriptions) {
+          unregisterSubscription(configId, unsubNodeIds);
+        }
+      }
 
       // Auto-delete subscriptions that no longer have any monitored items
       for (const [configId, subEntry] of [...node.subscriptions.entries()]) {
@@ -942,6 +963,7 @@ module.exports = function (RED) {
         });
 
         subItems.set(`event:${eventNodeId}`, monitoredItem);
+        registerSubscription("events", msg, msg.items?.length ? msg.items : [{ nodeId: eventNodeId }]);
         setSubscribedStatus("ready");
         done();
       } catch (err) {
@@ -1494,13 +1516,120 @@ module.exports = function (RED) {
           try { await entry.subscription.terminate(); } catch { /* may already be terminated */ }
           node.subscriptions.delete(subConfigId);
         }
+        unregisterAllSubscriptions(subConfigId);
       } else {
         // Terminate all subscriptions
         for (const [, entry] of node.subscriptions) {
           try { await entry.subscription.terminate(); } catch { /* may already be terminated */ }
         }
         node.subscriptions.clear();
+        unregisterAllSubscriptions();
       }
+    }
+
+    /**
+     * Register subscription parameters so they can be replayed after reconnection.
+     */
+    function registerSubscription(action, msg, items) {
+      const subConfigId = msg.subscriptionId;
+      for (const item of items) {
+        const key = `${subConfigId}:${item.nodeId}`;
+        const idx = node.subscriptionRegistry.findIndex(r => r.key === key);
+        if (idx !== -1) node.subscriptionRegistry.splice(idx, 1);
+
+        node.subscriptionRegistry.push({
+          key,
+          action,
+          subscriptionId: subConfigId,
+          item: { ...item },
+          samplingInterval: msg.samplingInterval,
+          queueSize: msg.queueSize,
+          discardOldest: msg.discardOldest,
+          deadbandType: msg.deadbandType,
+          deadbandValue: msg.deadbandValue,
+          customEventFields: msg.customEventFields,
+          eventTypeIds: msg.eventTypeIds,
+          topic: msg.topic,
+        });
+      }
+    }
+
+    /**
+     * Remove registered subscriptions for items being unsubscribed.
+     */
+    function unregisterSubscription(subConfigId, nodeIds) {
+      for (const nodeId of nodeIds) {
+        const key = `${subConfigId}:${nodeId}`;
+        const idx = node.subscriptionRegistry.findIndex(r => r.key === key);
+        if (idx !== -1) node.subscriptionRegistry.splice(idx, 1);
+      }
+    }
+
+    /**
+     * Remove all registered subscriptions for a given config ID, or all.
+     */
+    function unregisterAllSubscriptions(subConfigId) {
+      if (subConfigId) {
+        node.subscriptionRegistry = node.subscriptionRegistry.filter(
+          r => r.subscriptionId !== subConfigId
+        );
+      } else {
+        node.subscriptionRegistry = [];
+      }
+    }
+
+    /**
+     * Re-establish all registered subscriptions after reconnection.
+     * Called when server-side subscriptions may have been lost (e.g. server restarted).
+     */
+    async function resubscribeAll() {
+      if (node.subscriptionRegistry.length === 0) return;
+      if (!node.session) return;
+
+      node.warn(`Re-establishing ${node.subscriptionRegistry.length} monitored item(s) after reconnection`);
+
+      // Clear stale client-side subscription objects
+      node.subscriptions.clear();
+
+      // Group registry entries by subscriptionId and action
+      const groups = new Map();
+      for (const entry of node.subscriptionRegistry) {
+        const groupKey = `${entry.subscriptionId}:${entry.action}`;
+        if (!groups.has(groupKey)) {
+          groups.set(groupKey, { ...entry, items: [] });
+        }
+        groups.get(groupKey).items.push(entry.item);
+      }
+
+      for (const [, group] of groups) {
+        try {
+          const fakeMsg = {
+            subscriptionId: group.subscriptionId,
+            items: group.items,
+            samplingInterval: group.samplingInterval,
+            queueSize: group.queueSize,
+            discardOldest: group.discardOldest,
+            deadbandType: group.deadbandType,
+            deadbandValue: group.deadbandValue,
+            customEventFields: group.customEventFields,
+            eventTypeIds: group.eventTypeIds,
+            topic: group.topic,
+          };
+          const noop = () => {};
+
+          if (group.action === "subscribe") {
+            await actionSubscribe(fakeMsg, noop, noop);
+          } else if (group.action === "monitor") {
+            await actionMonitor(fakeMsg, noop, noop);
+          } else if (group.action === "events") {
+            await actionEvents(fakeMsg, noop, noop);
+          }
+        } catch (err) {
+          node.error(`Failed to re-establish subscription: ${err.message}`);
+        }
+      }
+
+      setSubscribedStatus("re-subscribed");
     }
 
     // ═══════════════════════════════════════════════════════════════════
