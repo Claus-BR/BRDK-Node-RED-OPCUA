@@ -13,56 +13,56 @@
  *  • Explicit typed-array construction for array values.
  */
 
-"use strict";
+'use strict';
 
-const opcua = require("node-opcua");
+const opcua = require('node-opcua');
 
 // ── Typed-array constructor lookup ─────────────────────────────────────────────
 
 const TYPED_ARRAY_MAP = {
-  SByte:   Int8Array,
-  Int8:    Int8Array,
-  Byte:    Uint8Array,
-  UInt8:   Uint8Array,
-  Int16:   Int16Array,
-  UInt16:  Uint16Array,
-  Int32:   Int32Array,
-  UInt32:  Uint32Array,
-  Float:   Float32Array,
-  Double:  Float64Array,
+  SByte: Int8Array,
+  Int8: Int8Array,
+  Byte: Uint8Array,
+  UInt8: Uint8Array,
+  Int16: Int16Array,
+  UInt16: Uint16Array,
+  Int32: Int32Array,
+  UInt32: Uint32Array,
+  Float: Float32Array,
+  Double: Float64Array,
 };
 
 // ── NodeId-to-type-name mapping (ns=0 built-in types) ──────────────────────────
 
 const NODEID_TYPE_MAP = {
-  "ns=0;i=1":  "Boolean",
-  "ns=0;i=2":  "SByte",
-  "ns=0;i=3":  "Byte",
-  "ns=0;i=4":  "Int16",
-  "ns=0;i=5":  "UInt16",
-  "ns=0;i=6":  "Int32",
-  "ns=0;i=7":  "UInt32",
-  "ns=0;i=8":  "Int64",
-  "ns=0;i=9":  "UInt64",
-  "ns=0;i=10": "Float",
-  "ns=0;i=11": "Double",
-  "ns=0;i=12": "String",
-  "ns=0;i=13": "DateTime",
-  "ns=0;i=14": "Guid",
-  "ns=0;i=15": "ByteString",
-  "ns=0;i=16": "XmlElement",
-  "ns=0;i=17": "NodeId",
-  "ns=0;i=18": "ExpandedNodeId",
-  "ns=0;i=19": "StatusCode",
-  "ns=0;i=20": "QualifiedName",
-  "ns=0;i=21": "LocalizedText",
-  "ns=0;i=22": "ExtensionObject",
-  "ns=0;i=23": "DataValue",
-  "ns=0;i=24": "BaseDataType",
-  "ns=0;i=25": "DiagnosticInfo",
-  "ns=0;i=26": "Number",
-  "ns=0;i=27": "Integer",
-  "ns=0;i=28": "UInteger",
+  'ns=0;i=1': 'Boolean',
+  'ns=0;i=2': 'SByte',
+  'ns=0;i=3': 'Byte',
+  'ns=0;i=4': 'Int16',
+  'ns=0;i=5': 'UInt16',
+  'ns=0;i=6': 'Int32',
+  'ns=0;i=7': 'UInt32',
+  'ns=0;i=8': 'Int64',
+  'ns=0;i=9': 'UInt64',
+  'ns=0;i=10': 'Float',
+  'ns=0;i=11': 'Double',
+  'ns=0;i=12': 'String',
+  'ns=0;i=13': 'DateTime',
+  'ns=0;i=14': 'Guid',
+  'ns=0;i=15': 'ByteString',
+  'ns=0;i=16': 'XmlElement',
+  'ns=0;i=17': 'NodeId',
+  'ns=0;i=18': 'ExpandedNodeId',
+  'ns=0;i=19': 'StatusCode',
+  'ns=0;i=20': 'QualifiedName',
+  'ns=0;i=21': 'LocalizedText',
+  'ns=0;i=22': 'ExtensionObject',
+  'ns=0;i=23': 'DataValue',
+  'ns=0;i=24': 'BaseDataType',
+  'ns=0;i=25': 'DiagnosticInfo',
+  'ns=0;i=26': 'Number',
+  'ns=0;i=27': 'Integer',
+  'ns=0;i=28': 'UInteger',
 };
 
 // ── Public API ─────────────────────────────────────────────────────────────────
@@ -87,28 +87,28 @@ function toOpcuaDataType(datatype) {
   if (!datatype) return opcua.DataType.Null;
 
   // Strip " Array" suffix for type resolution
-  const baseType = datatype.replace(/\s*Array$/i, "").trim();
+  const baseType = datatype.replace(/\s*Array$/i, '').trim();
 
   const typeMap = {
-    Boolean:       opcua.DataType.Boolean,
-    SByte:         opcua.DataType.SByte,
-    Int8:          opcua.DataType.SByte,
-    Byte:          opcua.DataType.Byte,
-    UInt8:         opcua.DataType.Byte,
-    Int16:         opcua.DataType.Int16,
-    UInt16:        opcua.DataType.UInt16,
-    Int32:         opcua.DataType.Int32,
-    UInt32:        opcua.DataType.UInt32,
-    Int64:         opcua.DataType.Int64,
-    UInt64:        opcua.DataType.UInt64,
-    Float:         opcua.DataType.Float,
-    Double:        opcua.DataType.Double,
-    String:        opcua.DataType.String,
-    DateTime:      opcua.DataType.DateTime,
-    Guid:          opcua.DataType.Guid,
-    ByteString:    opcua.DataType.ByteString,
-    XmlElement:    opcua.DataType.XmlElement,
-    NodeId:        opcua.DataType.NodeId,
+    Boolean: opcua.DataType.Boolean,
+    SByte: opcua.DataType.SByte,
+    Int8: opcua.DataType.SByte,
+    Byte: opcua.DataType.Byte,
+    UInt8: opcua.DataType.Byte,
+    Int16: opcua.DataType.Int16,
+    UInt16: opcua.DataType.UInt16,
+    Int32: opcua.DataType.Int32,
+    UInt32: opcua.DataType.UInt32,
+    Int64: opcua.DataType.Int64,
+    UInt64: opcua.DataType.UInt64,
+    Float: opcua.DataType.Float,
+    Double: opcua.DataType.Double,
+    String: opcua.DataType.String,
+    DateTime: opcua.DataType.DateTime,
+    Guid: opcua.DataType.Guid,
+    ByteString: opcua.DataType.ByteString,
+    XmlElement: opcua.DataType.XmlElement,
+    NodeId: opcua.DataType.NodeId,
     LocalizedText: opcua.DataType.LocalizedText,
     QualifiedName: opcua.DataType.QualifiedName,
     ExtensionObject: opcua.DataType.ExtensionObject,
@@ -137,63 +137,63 @@ function isArrayType(datatype) {
  * @returns {*} The coerced value.
  */
 function coerceScalarValue(datatype, value) {
-  const baseType = datatype.replace(/\s*Array$/i, "").trim();
+  const baseType = datatype.replace(/\s*Array$/i, '').trim();
 
   switch (baseType) {
-    case "Boolean":
+    case 'Boolean':
       return coerceBoolean(value);
 
-    case "Int8":
-    case "SByte":
+    case 'Int8':
+    case 'SByte':
       return clampInt(Number(value), -128, 127);
 
-    case "Byte":
-    case "UInt8":
+    case 'Byte':
+    case 'UInt8':
       return clampInt(Number(value), 0, 255);
 
-    case "Int16":
+    case 'Int16':
       return clampInt(Number(value), -32768, 32767);
 
-    case "UInt16":
+    case 'UInt16':
       return clampInt(Number(value), 0, 65535);
 
-    case "Int32":
+    case 'Int32':
       return clampInt(Number(value), -2147483648, 2147483647);
 
-    case "UInt32":
+    case 'UInt32':
       return clampInt(Number(value), 0, 4294967295);
 
-    case "Int64":
+    case 'Int64':
       return coerceInt64(value);
 
-    case "UInt64":
+    case 'UInt64':
       return coerceUInt64(value);
 
-    case "Float":
+    case 'Float':
       return parseFloat(value);
 
-    case "Double":
+    case 'Double':
       return parseFloat(value);
 
-    case "String":
+    case 'String':
       return String(value);
 
-    case "DateTime":
+    case 'DateTime':
       return coerceDateTime(value);
 
-    case "ByteString":
+    case 'ByteString':
       return coerceByteString(value);
 
-    case "LocalizedText":
+    case 'LocalizedText':
       return opcua.coerceLocalizedText(value);
 
-    case "NodeId":
+    case 'NodeId':
       return opcua.coerceNodeId(value);
 
-    case "QualifiedName":
-      return typeof value === "string" ? { name: value } : value;
+    case 'QualifiedName':
+      return typeof value === 'string' ? { name: value } : value;
 
-    case "ExtensionObject":
+    case 'ExtensionObject':
       return coerceExtensionObject(value);
 
     default:
@@ -216,7 +216,7 @@ function coerceScalarValue(datatype, value) {
  * @returns {TypedArray|Array}
  */
 function coerceArrayValue(datatype, value) {
-  const baseType = datatype.replace(/\s*Array$/i, "").trim();
+  const baseType = datatype.replace(/\s*Array$/i, '').trim();
 
   // Parse comma-separated strings into arrays
   const items = parseToArray(value);
@@ -228,22 +228,22 @@ function coerceArrayValue(datatype, value) {
   }
 
   // Boolean arrays
-  if (baseType === "Boolean") {
+  if (baseType === 'Boolean') {
     return items.map((item) => coerceBoolean(item));
   }
 
   // String arrays
-  if (baseType === "String") {
+  if (baseType === 'String') {
     return items.map((item) => String(item));
   }
 
   // ExtensionObject arrays
-  if (baseType === "ExtensionObject") {
+  if (baseType === 'ExtensionObject') {
     return items.map((item) => coerceExtensionObject(item));
   }
 
   // Variant arrays (recursive)
-  if (baseType === "Variant") {
+  if (baseType === 'Variant') {
     return items.map((item) => {
       if (item && item.dataType) {
         return new opcua.Variant({
@@ -330,8 +330,8 @@ function clampInt(value, min, max) {
  * Coerce a value to boolean (handles strings "true"/"false", numbers 0/1).
  */
 function coerceBoolean(value) {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") return value.toLowerCase() === "true" || value === "1";
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value.toLowerCase() === 'true' || value === '1';
   return Boolean(value);
 }
 
@@ -358,8 +358,8 @@ function coerceUInt64(value) {
  */
 function coerceDateTime(value) {
   if (value instanceof Date) return value;
-  if (typeof value === "number") return new Date(value);
-  if (typeof value === "string") return new Date(value);
+  if (typeof value === 'number') return new Date(value);
+  if (typeof value === 'string') return new Date(value);
   return new Date();
 }
 
@@ -368,7 +368,7 @@ function coerceDateTime(value) {
  */
 function coerceByteString(value) {
   if (Buffer.isBuffer(value)) return value;
-  if (typeof value === "string") return Buffer.from(value);
+  if (typeof value === 'string') return Buffer.from(value);
   return Buffer.from(String(value));
 }
 
@@ -376,7 +376,7 @@ function coerceByteString(value) {
  * Coerce a value to an ExtensionObject (parse JSON strings).
  */
 function coerceExtensionObject(value) {
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     try {
       return JSON.parse(value);
     } catch {
@@ -396,7 +396,7 @@ function coerceExtensionObject(value) {
 function toPlainValue(value) {
   if (value === null || value === undefined) return value;
   const type = typeof value;
-  if (type !== "object" && type !== "function") return value;
+  if (type !== 'object' && type !== 'function') return value;
   if (value instanceof Date) return value;
   if (Buffer.isBuffer(value)) return value;
   if (ArrayBuffer.isView(value)) return value; // TypedArrays (Int32Array, Float64Array, …)
@@ -425,8 +425,8 @@ function toPlainValue(value) {
  */
 function parseToArray(value) {
   if (Array.isArray(value)) return value;
-  if (typeof value === "string" && value.includes(",")) {
-    return value.split(",").map((s) => s.trim());
+  if (typeof value === 'string' && value.includes(',')) {
+    return value.split(',').map((s) => s.trim());
   }
   return [value];
 }
@@ -488,7 +488,7 @@ function toMilliseconds(time, unit) {
  * @returns {string}
  */
 function getTimeUnitLabel(unit) {
-  const labels = { ms: "millisecond(s)", s: "second(s)", m: "minute(s)", h: "hour(s)" };
+  const labels = { ms: 'millisecond(s)', s: 'second(s)', m: 'minute(s)', h: 'hour(s)' };
   return labels[unit] || unit;
 }
 

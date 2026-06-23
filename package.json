@@ -42,10 +42,10 @@
   },
   "scripts": {
     "prepare": "lefthook install",
-    "format": "prettier --write \"src/**/*.{js,html}\"",
-    "format:check": "prettier --check \"src/**/*.{js,html}\"",
-    "lint": "eslint src/**/*.js",
-    "lint:fix": "eslint src/**/*.js --fix"
+    "format": "prettier --write \"**/*.{js,html}\"",
+    "format:check": "prettier --check \" **/*.{js,html}\"",
+    "lint": "eslint **/*.js",
+    "lint:fix": "eslint **/*.js --fix"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

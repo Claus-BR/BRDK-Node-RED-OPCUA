@@ -10,67 +10,80 @@
      1. NODE REGISTRATION
      ═══════════════════════════════════════════════════════════════════════ -->
 <script type="text/javascript">
-  RED.nodes.registerType("opcua-command", {
-    category: "BRDK OPCUA",
-    color: "#E9967A",
+  RED.nodes.registerType('opcua-command', {
+    category: 'BRDK OPCUA',
+    color: '#E9967A',
     defaults: {
-      command:        { value: "", required: true },
-      name:           { value: "" },
+      command: { value: '', required: true },
+      name: { value: '' },
       // Node identification
-      nodeId:         { value: "" },
-      datatype:       { value: "Double" },
-      value:          { value: "" },
-      description:    { value: "" },
-      browseName:     { value: "" },
-      displayName:    { value: "" },
+      nodeId: { value: '' },
+      datatype: { value: 'Double' },
+      value: { value: '' },
+      description: { value: '' },
+      browseName: { value: '' },
+      displayName: { value: '' },
       // Equipment / Physical Asset
-      nodeName:       { value: "" },
+      nodeName: { value: '' },
       // Method
-      parentNodeId:   { value: "" },
-      methodName:     { value: "" },
+      parentNodeId: { value: '' },
+      methodName: { value: '' },
       // Alarms
-      priority:       { value: 100 },
-      alarmText:      { value: "" },
-      highHigh:       { value: 90 },
-      high:           { value: 70 },
-      low:            { value: 30 },
-      lowLow:         { value: 10 },
+      priority: { value: 100 },
+      alarmText: { value: '' },
+      highHigh: { value: 90 },
+      high: { value: 70 },
+      low: { value: 30 },
+      lowLow: { value: 10 },
       // Extension Object
-      typeId:         { value: "" },
+      typeId: { value: '' },
       // File
-      fileName:       { value: "" },
+      fileName: { value: '' },
       // Namespace
-      namespaceUri:   { value: "" },
-      namespaceIndex: { value: "1" },
+      namespaceUri: { value: '' },
+      namespaceIndex: { value: '1' },
     },
     inputs: 1,
     outputs: 1,
-    icon: "font-awesome/fa-terminal",
+    icon: 'font-awesome/fa-terminal',
     label: function () {
-      return this.name || this.command || "opcua command";
+      return this.name || this.command || 'opcua command';
     },
     labelStyle: function () {
-      return this.name ? "node_label_italic" : "";
+      return this.name ? 'node_label_italic' : '';
     },
-    paletteLabel: "opcua command",
+    paletteLabel: 'opcua command',
 
     oneditprepare: function () {
       // Ensure defaults for properties added after node creation
       var defaults = {
-        nodeId: "", datatype: "Double", value: "", description: "",
-        browseName: "", displayName: "", nodeName: "",
-        parentNodeId: "", methodName: "",
-        priority: 100, alarmText: "",
-        highHigh: 90, high: 70, low: 30, lowLow: 10,
-        typeId: "", fileName: "", namespaceUri: "", namespaceIndex: "1",
+        nodeId: '',
+        datatype: 'Double',
+        value: '',
+        description: '',
+        browseName: '',
+        displayName: '',
+        nodeName: '',
+        parentNodeId: '',
+        methodName: '',
+        priority: 100,
+        alarmText: '',
+        highHigh: 90,
+        high: 70,
+        low: 30,
+        lowLow: 10,
+        typeId: '',
+        fileName: '',
+        namespaceUri: '',
+        namespaceIndex: '1',
       };
       var self = this;
       Object.keys(defaults).forEach(function (key) {
-        var $el = $("#node-input-" + key);
-        if ($el.length && ($el.val() === "" || $el.val() === null || $el.val() === undefined)) {
+        var $el = $('#node-input-' + key);
+        if ($el.length && ($el.val() === '' || $el.val() === null || $el.val() === undefined)) {
           var val = self[key] !== undefined ? self[key] : defaults[key];
-          if ($el.is(":checkbox")) {
-            $el.prop("checked", !!val);
+          if ($el.is(':checkbox')) {
+            $el.prop('checked', !!val);
           } else {
             $el.val(val);
           }
@@ -78,57 +91,64 @@
       });
 
       function updateVisibility() {
-        var cmd = $("#node-input-command").val();
+        var cmd = $('#node-input-command').val();
 
         // Commands that need a nodeId
         var needsNodeId = [
-          "addVariable", "addFolder", "setFolder", "deleteNode",
-          "installHistorian", "installDiscreteAlarm", "installLimitAlarm",
-          "addExtensionObject", "addFile", "bindMethod",
+          'addVariable',
+          'addFolder',
+          'setFolder',
+          'deleteNode',
+          'installHistorian',
+          'installDiscreteAlarm',
+          'installLimitAlarm',
+          'addExtensionObject',
+          'addFile',
+          'bindMethod',
         ].includes(cmd);
 
         // Variable-creation fields
-        var isAddVariable = cmd === "addVariable";
-        var isAddFolder   = cmd === "addFolder";
+        var isAddVariable = cmd === 'addVariable';
+        var isAddFolder = cmd === 'addFolder';
 
         // Equipment / Asset
-        var needsNodeName = ["addEquipment", "addPhysicalAsset"].includes(cmd);
+        var needsNodeName = ['addEquipment', 'addPhysicalAsset'].includes(cmd);
 
         // Method
-        var isAddMethod = cmd === "addMethod";
+        var isAddMethod = cmd === 'addMethod';
 
         // Alarms
-        var isAlarm      = ["installDiscreteAlarm", "installLimitAlarm"].includes(cmd);
-        var isLimitAlarm = cmd === "installLimitAlarm";
+        var isAlarm = ['installDiscreteAlarm', 'installLimitAlarm'].includes(cmd);
+        var isLimitAlarm = cmd === 'installLimitAlarm';
 
         // Extension Object
-        var isExtObj = cmd === "addExtensionObject";
+        var isExtObj = cmd === 'addExtensionObject';
 
         // File
-        var needsFileName = ["addFile", "saveAddressSpace", "loadAddressSpace"].includes(cmd);
+        var needsFileName = ['addFile', 'saveAddressSpace', 'loadAddressSpace'].includes(cmd);
 
         // Namespace
-        var needsNsUri   = ["registerNamespace", "getNamespaceIndex"].includes(cmd);
-        var needsNsIndex = cmd === "saveAddressSpace";
+        var needsNsUri = ['registerNamespace', 'getNamespaceIndex'].includes(cmd);
+        var needsNsIndex = cmd === 'saveAddressSpace';
 
         // Toggle visibility
-        $(".cmd-nodeid-row").toggle(needsNodeId);
-        $(".cmd-datatype-row").toggle(isAddVariable);
-        $(".cmd-value-row").toggle(isAddVariable);
-        $(".cmd-description-row").toggle(isAddVariable || isAddFolder);
-        $(".cmd-browsename-row").toggle(isAddVariable || isAddFolder);
-        $(".cmd-displayname-row").toggle(isAddVariable || isAddFolder);
-        $(".cmd-nodename-row").toggle(needsNodeName);
-        $(".cmd-method-row").toggle(isAddMethod);
-        $(".cmd-alarm-row").toggle(isAlarm);
-        $(".cmd-limit-row").toggle(isLimitAlarm);
-        $(".cmd-typeid-row").toggle(isExtObj);
-        $(".cmd-filename-row").toggle(needsFileName);
-        $(".cmd-nsuri-row").toggle(needsNsUri);
-        $(".cmd-nsindex-row").toggle(needsNsIndex);
+        $('.cmd-nodeid-row').toggle(needsNodeId);
+        $('.cmd-datatype-row').toggle(isAddVariable);
+        $('.cmd-value-row').toggle(isAddVariable);
+        $('.cmd-description-row').toggle(isAddVariable || isAddFolder);
+        $('.cmd-browsename-row').toggle(isAddVariable || isAddFolder);
+        $('.cmd-displayname-row').toggle(isAddVariable || isAddFolder);
+        $('.cmd-nodename-row').toggle(needsNodeName);
+        $('.cmd-method-row').toggle(isAddMethod);
+        $('.cmd-alarm-row').toggle(isAlarm);
+        $('.cmd-limit-row').toggle(isLimitAlarm);
+        $('.cmd-typeid-row').toggle(isExtObj);
+        $('.cmd-filename-row').toggle(needsFileName);
+        $('.cmd-nsuri-row').toggle(needsNsUri);
+        $('.cmd-nsindex-row').toggle(needsNsIndex);
       }
 
-      $("#node-input-command").on("change", updateVisibility);
+      $('#node-input-command').on('change', updateVisibility);
       updateVisibility();
     },
   });
@@ -138,7 +158,6 @@
      2. EDIT TEMPLATE
      ═══════════════════════════════════════════════════════════════════════ -->
 <script type="text/html" data-template-name="opcua-command">
-
   <!-- Command selector -->
   <div class="form-row">
     <label for="node-input-command"><i class="fa fa-terminal"></i> Command</label>
@@ -190,7 +209,7 @@
   <!-- ── Node ID ─────────────────────────────────────────────────────── -->
   <div class="form-row cmd-nodeid-row" style="display: none;">
     <label for="node-input-nodeId"><i class="fa fa-crosshairs"></i> Node ID</label>
-    <input type="text" id="node-input-nodeId" placeholder="ns=1;s=MyVariable">
+    <input type="text" id="node-input-nodeId" placeholder="ns=1;s=MyVariable" />
   </div>
 
   <!-- ── Datatype (addVariable) ──────────────────────────────────────── -->
@@ -231,116 +250,132 @@
   <!-- ── Initial Value (addVariable) ─────────────────────────────────── -->
   <div class="form-row cmd-value-row" style="display: none;">
     <label for="node-input-value"><i class="fa fa-pencil"></i> Initial Value</label>
-    <input type="text" id="node-input-value" placeholder="0">
+    <input type="text" id="node-input-value" placeholder="0" />
   </div>
 
   <!-- ── Description (addVariable, addFolder) ────────────────────────── -->
   <div class="form-row cmd-description-row" style="display: none;">
     <label for="node-input-description"><i class="fa fa-info-circle"></i> Description</label>
-    <input type="text" id="node-input-description" placeholder="Optional description">
+    <input type="text" id="node-input-description" placeholder="Optional description" />
   </div>
 
   <!-- ── Browse Name (addVariable, addFolder) ────────────────────────── -->
   <div class="form-row cmd-browsename-row" style="display: none;">
     <label for="node-input-browseName"><i class="fa fa-tag"></i> Browse Name</label>
-    <input type="text" id="node-input-browseName" placeholder="Same as variable name if empty">
+    <input type="text" id="node-input-browseName" placeholder="Same as variable name if empty" />
   </div>
 
   <!-- ── Display Name (addVariable, addFolder) ───────────────────────── -->
   <div class="form-row cmd-displayname-row" style="display: none;">
     <label for="node-input-displayName"><i class="fa fa-font"></i> Display Name</label>
-    <input type="text" id="node-input-displayName" placeholder="Same as variable name if empty">
+    <input type="text" id="node-input-displayName" placeholder="Same as variable name if empty" />
   </div>
 
   <!-- ── Node Name (addEquipment, addPhysicalAsset) ──────────────────── -->
   <div class="form-row cmd-nodename-row" style="display: none;">
     <label for="node-input-nodeName"><i class="fa fa-cube"></i> Node Name</label>
-    <input type="text" id="node-input-nodeName" placeholder="MyEquipment">
+    <input type="text" id="node-input-nodeName" placeholder="MyEquipment" />
   </div>
 
   <!-- ── Extension Object Type ID ────────────────────────────────────── -->
   <div class="form-row cmd-typeid-row" style="display: none;">
     <label for="node-input-typeId"><i class="fa fa-puzzle-piece"></i> Type ID</label>
-    <input type="text" id="node-input-typeId" placeholder="i=12345 (ExtensionObject type NodeId)">
+    <input type="text" id="node-input-typeId" placeholder="i=12345 (ExtensionObject type NodeId)" />
   </div>
 
   <!-- ── Method: Parent Node ─────────────────────────────────────────── -->
   <div class="form-row cmd-method-row" style="display: none;">
     <label for="node-input-parentNodeId"><i class="fa fa-cube"></i> Parent Node</label>
-    <input type="text" id="node-input-parentNodeId" placeholder="ns=1;s=MyObject">
+    <input type="text" id="node-input-parentNodeId" placeholder="ns=1;s=MyObject" />
   </div>
   <div class="form-row cmd-method-row" style="display: none;">
     <label for="node-input-methodName"><i class="fa fa-cog"></i> Method Name</label>
-    <input type="text" id="node-input-methodName" placeholder="MyMethod">
+    <input type="text" id="node-input-methodName" placeholder="MyMethod" />
   </div>
 
   <!-- ── Alarm: Common ───────────────────────────────────────────────── -->
   <div class="form-row cmd-alarm-row" style="display: none;">
     <label for="node-input-priority"><i class="fa fa-exclamation-triangle"></i> Priority</label>
-    <input type="number" id="node-input-priority" style="width: 100px;" min="0" max="1000" placeholder="100">
+    <input
+      type="number"
+      id="node-input-priority"
+      style="width: 100px;"
+      min="0"
+      max="1000"
+      placeholder="100"
+    />
   </div>
   <div class="form-row cmd-alarm-row" style="display: none;">
     <label for="node-input-alarmText"><i class="fa fa-comment"></i> Alarm Text</label>
-    <input type="text" id="node-input-alarmText" placeholder="Alarm on variable">
+    <input type="text" id="node-input-alarmText" placeholder="Alarm on variable" />
   </div>
 
   <!-- ── Limit Alarm: Thresholds ─────────────────────────────────────── -->
   <div class="form-row cmd-limit-row" style="display: none;">
     <label for="node-input-highHigh"><i class="fa fa-chevron-up"></i> High-High</label>
-    <input type="number" id="node-input-highHigh" style="width: 100px;" step="any" placeholder="90">
+    <input
+      type="number"
+      id="node-input-highHigh"
+      style="width: 100px;"
+      step="any"
+      placeholder="90"
+    />
   </div>
   <div class="form-row cmd-limit-row" style="display: none;">
     <label for="node-input-high"><i class="fa fa-arrow-up"></i> High</label>
-    <input type="number" id="node-input-high" style="width: 100px;" step="any" placeholder="70">
+    <input type="number" id="node-input-high" style="width: 100px;" step="any" placeholder="70" />
   </div>
   <div class="form-row cmd-limit-row" style="display: none;">
     <label for="node-input-low"><i class="fa fa-arrow-down"></i> Low</label>
-    <input type="number" id="node-input-low" style="width: 100px;" step="any" placeholder="30">
+    <input type="number" id="node-input-low" style="width: 100px;" step="any" placeholder="30" />
   </div>
   <div class="form-row cmd-limit-row" style="display: none;">
     <label for="node-input-lowLow"><i class="fa fa-chevron-down"></i> Low-Low</label>
-    <input type="number" id="node-input-lowLow" style="width: 100px;" step="any" placeholder="10">
+    <input type="number" id="node-input-lowLow" style="width: 100px;" step="any" placeholder="10" />
   </div>
 
   <!-- ── File Name ───────────────────────────────────────────────────── -->
   <div class="form-row cmd-filename-row" style="display: none;">
     <label for="node-input-fileName"><i class="fa fa-file"></i> File Name</label>
-    <input type="text" id="node-input-fileName" placeholder="data.bin / addressSpace.xml">
+    <input type="text" id="node-input-fileName" placeholder="data.bin / addressSpace.xml" />
   </div>
 
   <!-- ── Namespace URI ───────────────────────────────────────────────── -->
   <div class="form-row cmd-nsuri-row" style="display: none;">
     <label for="node-input-namespaceUri"><i class="fa fa-link"></i> Namespace URI</label>
-    <input type="text" id="node-input-namespaceUri" placeholder="urn:MyCompany:MyServer">
+    <input type="text" id="node-input-namespaceUri" placeholder="urn:MyCompany:MyServer" />
   </div>
 
   <!-- ── Namespace Index (saveAddressSpace) ──────────────────────────── -->
   <div class="form-row cmd-nsindex-row" style="display: none;">
     <label for="node-input-namespaceIndex"><i class="fa fa-hashtag"></i> NS Index</label>
-    <input type="text" id="node-input-namespaceIndex" style="width: 80px;" placeholder="1">
+    <input type="text" id="node-input-namespaceIndex" style="width: 80px;" placeholder="1" />
   </div>
 
   <!-- Node name -->
   <div class="form-row">
     <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
-    <input type="text" id="node-input-name" placeholder="Name">
+    <input type="text" id="node-input-name" placeholder="Name" />
   </div>
-
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
      3. HELP TEXT
      ═══════════════════════════════════════════════════════════════════════ -->
 <script type="text/html" data-help-name="opcua-command">
-  <p>Sets <code>msg.command</code> and command-specific configuration
-  on the message for a downstream OPC UA Server node.</p>
+  <p>
+    Sets <code>msg.command</code> and command-specific configuration on the message for a downstream
+    OPC UA Server node.
+  </p>
 
   <h3>Inputs</h3>
   <dl class="message-properties">
     <dt>any</dt>
-    <dd>Passes existing message properties through. Matching properties already
-    on <code>msg</code> take priority over configured defaults. If <code>msg.items</code>
-    is present for commands that use items, it flows through unchanged.</dd>
+    <dd>
+      Passes existing message properties through. Matching properties already on
+      <code>msg</code> take priority over configured defaults. If <code>msg.items</code> is present
+      for commands that use items, it flows through unchanged.
+    </dd>
   </dl>
 
   <h3>Outputs</h3>
@@ -354,12 +389,15 @@
   <h4>Address Space — Variables</h4>
   <dl class="message-properties">
     <dt>addVariable</dt>
-    <dd>Add a variable to the server address space. Configure the Node ID
-    (<code>ns=1;s=Name</code>), data type, initial value, and optional
-    description / browse name / display name.</dd>
+    <dd>
+      Add a variable to the server address space. Configure the Node ID (<code>ns=1;s=Name</code>),
+      data type, initial value, and optional description / browse name / display name.
+    </dd>
     <dt>addExtensionObject</dt>
-    <dd>Add an extension object variable. Provide the Node ID and the Type ID
-    (NodeId of the ExtensionObject type definition).</dd>
+    <dd>
+      Add an extension object variable. Provide the Node ID and the Type ID (NodeId of the
+      ExtensionObject type definition).
+    </dd>
   </dl>
 
   <h4>Address Space — Structure</h4>
@@ -367,8 +405,10 @@
     <dt>addFolder</dt>
     <dd>Add a folder under the current parent folder.</dd>
     <dt>setFolder</dt>
-    <dd>Set the current parent folder for subsequent add operations. Provide
-    the Node ID of an existing folder.</dd>
+    <dd>
+      Set the current parent folder for subsequent add operations. Provide the Node ID of an
+      existing folder.
+    </dd>
     <dt>deleteNode</dt>
     <dd>Delete a node from the address space by Node ID.</dd>
     <dt>addEquipment</dt>
@@ -380,12 +420,16 @@
   <h4>Methods</h4>
   <dl class="message-properties">
     <dt>addMethod</dt>
-    <dd>Add a method to a parent object. Configure the parent Node ID and
-    method name. Input/output arguments can be provided on <code>msg.inputArguments</code>
-    and <code>msg.outputArguments</code>.</dd>
+    <dd>
+      Add a method to a parent object. Configure the parent Node ID and method name. Input/output
+      arguments can be provided on <code>msg.inputArguments</code> and
+      <code>msg.outputArguments</code>.
+    </dd>
     <dt>bindMethod</dt>
-    <dd>Bind a JavaScript function to an existing method. The Node ID targets
-    the method; <code>msg.code</code> must contain the function (use a Function node upstream).</dd>
+    <dd>
+      Bind a JavaScript function to an existing method. The Node ID targets the method;
+      <code>msg.code</code> must contain the function (use a Function node upstream).
+    </dd>
   </dl>
 
   <h4>Monitoring</h4>
@@ -427,8 +471,10 @@
   <h4>Users</h4>
   <dl class="message-properties">
     <dt>setUsers</dt>
-    <dd>Update the user credential list at runtime. The users array must be provided
-    on <code>msg.payload.users</code> or <code>msg.users</code> (use a Function node upstream).</dd>
+    <dd>
+      Update the user credential list at runtime. The users array must be provided on
+      <code>msg.payload.users</code> or <code>msg.users</code> (use a Function node upstream).
+    </dd>
   </dl>
 
   <h4>Lifecycle</h4>
@@ -442,21 +488,26 @@
   </dl>
 
   <h3>Details</h3>
-  <p>Place this node before an <b>OPC UA Server</b> node to configure server
-  commands without writing Function nodes. Commands that operate on nodes
-  use <code>msg.items</code> for targeting (same array structure used by
-  item/smart-item nodes). Only the relevant fields for the selected command
-  are shown in the editor.</p>
+  <p>
+    Place this node before an <b>OPC UA Server</b> node to configure server commands without writing
+    Function nodes. Commands that operate on nodes use <code>msg.items</code> for targeting (same
+    array structure used by item/smart-item nodes). Only the relevant fields for the selected
+    command are shown in the editor.
+  </p>
 
-  <p>Properties already present on the incoming <code>msg</code> take priority
-  over defaults (allowing dynamic override from upstream nodes). If <code>msg.items</code>
-  is already set, it flows through untouched for commands that use items.</p>
+  <p>
+    Properties already present on the incoming <code>msg</code> take priority over defaults
+    (allowing dynamic override from upstream nodes). If <code>msg.items</code> is already set, it
+    flows through untouched for commands that use items.
+  </p>
 
   <h4>Typical setup flow</h4>
-  <pre>inject (once) → command (registerNamespace) → server
+  <pre>
+inject (once) → command (registerNamespace) → server
 inject (once) → command (addFolder) → server
 inject (once) → command (addVariable, ns=1;s=Temp, Double) → server
-inject (once) → command (installHistorian) → server</pre>
+inject (once) → command (installHistorian) → server</pre
+  >
 
   <h4>Runtime data flow</h4>
   <pre>sensor → opcua-item/smart-item → server  (updates variable values via msg.items)</pre>

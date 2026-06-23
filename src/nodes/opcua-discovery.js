@@ -11,25 +11,24 @@
  *   msg.payload — array of discovery URL strings for all registered servers
  */
 
-"use strict";
+'use strict';
 
-const opcua = require("node-opcua");
-const os = require("os");
-const path = require("path");
+const opcua = require('node-opcua');
+const os = require('os');
+const path = require('path');
 
 module.exports = function (RED) {
-
   function OpcUaDiscoveryNode(config) {
     RED.nodes.createNode(this, config);
 
     const node = this;
-    this.name = config.name || "";
+    this.name = config.name || '';
 
     let server = null;
 
     // ── Certificate manager for discovery server ─────────────────────────
     const certManager = new opcua.OPCUACertificateManager({
-      rootFolder: path.join(path.dirname(__dirname), "discovery-pki"),
+      rootFolder: path.join(path.dirname(__dirname), 'discovery-pki'),
       automaticallyAcceptUnknownCertificate: true,
     });
 
@@ -39,9 +38,9 @@ module.exports = function (RED) {
       port: 4840,
       serverCertificateManager: certManager,
       serverInfo: {
-        applicationUri: opcua.makeApplicationUrn(hostname, "BRDK-NodeRED-OPCUA-Discovery"),
-        productUri: "BRDK-NodeRED-OPCUA-Discovery",
-        applicationName: { text: "BRDK Node-RED OPCUA Discovery", locale: "en" },
+        applicationUri: opcua.makeApplicationUrn(hostname, 'BRDK-NodeRED-OPCUA-Discovery'),
+        productUri: 'BRDK-NodeRED-OPCUA-Discovery',
+        applicationName: { text: 'BRDK Node-RED OPCUA Discovery', locale: 'en' },
         gatewayServerUri: null,
         discoveryProfileUri: null,
         discoveryUrls: [],
@@ -52,7 +51,7 @@ module.exports = function (RED) {
         maxSessions: 20,
       },
       buildInfo: {
-        buildNumber: "1.0.0",
+        buildNumber: '1.0.0',
         buildDate: new Date().toISOString(),
       },
     };
@@ -60,25 +59,25 @@ module.exports = function (RED) {
     // ── Start the discovery server ───────────────────────────────────────
     (async () => {
       try {
-        node.status({ fill: "yellow", shape: "dot", text: "starting" });
+        node.status({ fill: 'yellow', shape: 'dot', text: 'starting' });
         await certManager.initialize();
 
         server = new opcua.OPCUADiscoveryServer(serverOptions);
         await server.start();
 
         const port = server.endpoints?.[0]?.port || 4840;
-        node.status({ fill: "green", shape: "dot", text: `discovery on port ${port}` });
+        node.status({ fill: 'green', shape: 'dot', text: `discovery on port ${port}` });
         node.log(`Discovery server listening on port ${port}`);
       } catch (err) {
-        node.status({ fill: "red", shape: "ring", text: "start error" });
+        node.status({ fill: 'red', shape: 'ring', text: 'start error' });
         node.error(`Discovery server failed to start: ${err.message}`);
-        node.error("Check if port 4840 is already in use (netstat -ano | findstr :4840)");
+        node.error('Check if port 4840 is already in use (netstat -ano | findstr :4840)');
       }
     })();
 
     // ── Input handler — findServers ──────────────────────────────────────
-    node.on("input", async (msg, send, done) => {
-      const discoveryUrl = msg.discoveryUrl || "opc.tcp://localhost:4840";
+    node.on('input', async (msg, send, done) => {
+      const discoveryUrl = msg.discoveryUrl || 'opc.tcp://localhost:4840';
 
       try {
         const { servers } = await opcua.findServers(discoveryUrl);
@@ -100,11 +99,11 @@ module.exports = function (RED) {
     });
 
     // ── Close handler ────────────────────────────────────────────────────
-    node.on("close", async (done) => {
+    node.on('close', async (done) => {
       if (server) {
         try {
           await server.shutdown();
-          node.log("Discovery server shut down");
+          node.log('Discovery server shut down');
         } catch (err) {
           node.warn(`Discovery shutdown error: ${err.message}`);
         }
@@ -114,5 +113,5 @@ module.exports = function (RED) {
     });
   }
 
-  RED.nodes.registerType("opcua-discovery", OpcUaDiscoveryNode);
+  RED.nodes.registerType('opcua-discovery', OpcUaDiscoveryNode);
 };

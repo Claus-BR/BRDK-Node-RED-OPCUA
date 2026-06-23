@@ -15,18 +15,17 @@
  * persistent connection to an OPC UA server.
  */
 
-"use strict";
+'use strict';
 
-const opcua = require("node-opcua");
-const { readFileSync } = require("fs");
-const { getClientCertificateManager } = require("./opcua-certificate-manager");
+const opcua = require('node-opcua');
+const { readFileSync } = require('fs');
 
 // ── Default connection strategy ────────────────────────────────────────────────
 
 const DEFAULT_CONNECTION_STRATEGY = {
-  maxRetry: 10512000,   // Effectively infinite (10 million retries ≈ years)
-  initialDelay: 5000,   // 5 seconds before first retry
-  maxDelay: 30_000,     // 30 seconds max between retries
+  maxRetry: 10512000, // Effectively infinite (10 million retries ≈ years)
+  initialDelay: 5000, // 5 seconds before first retry
+  maxDelay: 30_000, // 30 seconds max between retries
 };
 
 // ── User identity resolution ───────────────────────────────────────────────────
@@ -61,9 +60,9 @@ function resolveUserIdentity(endpointNode) {
       return {
         type: opcua.UserTokenType.Certificate,
         certificateData: readFileSync(certPath),
-        privateKey: readFileSync(keyPath, "utf-8"),
+        privateKey: readFileSync(keyPath, 'utf-8'),
       };
-    } catch (err) {
+    } catch (_err) {
       // Fall back to anonymous if certificate files can't be read
       return { type: opcua.UserTokenType.Anonymous };
     }
@@ -83,13 +82,13 @@ function resolveUserIdentity(endpointNode) {
  */
 function resolveSecurityMode(mode) {
   const map = {
-    None:            opcua.MessageSecurityMode.None,
-    Sign:            opcua.MessageSecurityMode.Sign,
-    SignAndEncrypt:   opcua.MessageSecurityMode.SignAndEncrypt,
+    None: opcua.MessageSecurityMode.None,
+    Sign: opcua.MessageSecurityMode.Sign,
+    SignAndEncrypt: opcua.MessageSecurityMode.SignAndEncrypt,
     // Legacy uppercase compatibility
-    NONE:            opcua.MessageSecurityMode.None,
-    SIGN:            opcua.MessageSecurityMode.Sign,
-    SIGNANDENCRYPT:  opcua.MessageSecurityMode.SignAndEncrypt,
+    NONE: opcua.MessageSecurityMode.None,
+    SIGN: opcua.MessageSecurityMode.Sign,
+    SIGNANDENCRYPT: opcua.MessageSecurityMode.SignAndEncrypt,
   };
   return map[mode] || opcua.MessageSecurityMode.None;
 }
@@ -102,16 +101,16 @@ function resolveSecurityMode(mode) {
  */
 function resolveSecurityPolicy(policy) {
   const map = {
-    None:                      opcua.SecurityPolicy.None,
-    Basic128:                  opcua.SecurityPolicy.Basic128,
-    Basic192:                  opcua.SecurityPolicy.Basic192,
-    Basic192Rsa15:             opcua.SecurityPolicy.Basic192Rsa15,
-    Basic256Rsa15:             opcua.SecurityPolicy.Basic256Rsa15,
-    Basic256Sha256:            opcua.SecurityPolicy.Basic256Sha256,
-    Aes128_Sha256_RsaOaep:    opcua.SecurityPolicy.Aes128_Sha256_RsaOaep,
-    Aes256_Sha256_RsaPss:     opcua.SecurityPolicy.Aes256_Sha256_RsaPss,
-    Basic128Rsa15:             opcua.SecurityPolicy.Basic128Rsa15,
-    Basic256:                  opcua.SecurityPolicy.Basic256,
+    None: opcua.SecurityPolicy.None,
+    Basic128: opcua.SecurityPolicy.Basic128,
+    Basic192: opcua.SecurityPolicy.Basic192,
+    Basic192Rsa15: opcua.SecurityPolicy.Basic192Rsa15,
+    Basic256Rsa15: opcua.SecurityPolicy.Basic256Rsa15,
+    Basic256Sha256: opcua.SecurityPolicy.Basic256Sha256,
+    Aes128_Sha256_RsaOaep: opcua.SecurityPolicy.Aes128_Sha256_RsaOaep,
+    Aes256_Sha256_RsaPss: opcua.SecurityPolicy.Aes256_Sha256_RsaPss,
+    Basic128Rsa15: opcua.SecurityPolicy.Basic128Rsa15,
+    Basic256: opcua.SecurityPolicy.Basic256,
   };
   return map[policy] || opcua.SecurityPolicy.None;
 }

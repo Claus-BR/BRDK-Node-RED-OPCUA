@@ -41,25 +41,27 @@
  *   Output 3 — Batch results (all items from read in a single msg)
  */
 
-"use strict";
+'use strict';
 
-const opcua = require("node-opcua");
-const { ClientFile } = require("node-opcua-file-transfer");
-const { getExtraDataTypeManager, DataTypeExtractStrategy } = require("node-opcua-client-dynamic-extension-object");
-const { readFileSync } = require("fs");
+const opcua = require('node-opcua');
+const { ClientFile } = require('node-opcua-file-transfer');
+const {
+  getExtraDataTypeManager,
+  DataTypeExtractStrategy,
+} = require('node-opcua-client-dynamic-extension-object');
+const { readFileSync } = require('fs');
 
-const { getClientCertificateManager } = require("../lib/opcua-certificate-manager");
-const { getStatus, getStatusWithDetail } = require("../lib/opcua-status");
-const converter = require("../lib/opcua-data-converter");
+const { getClientCertificateManager } = require('../lib/opcua-certificate-manager');
+const { getStatus, getStatusWithDetail } = require('../lib/opcua-status');
+const converter = require('../lib/opcua-data-converter');
 const {
   DEFAULT_CONNECTION_STRATEGY,
   resolveUserIdentity,
   resolveSecurityMode,
   resolveSecurityPolicy,
-} = require("../lib/opcua-connection");
+} = require('../lib/opcua-connection');
 
 module.exports = function (RED) {
-
   // ═══════════════════════════════════════════════════════════════════════════
   //  NODE CONSTRUCTOR
   // ═══════════════════════════════════════════════════════════════════════════
@@ -70,38 +72,38 @@ module.exports = function (RED) {
     const node = this;
 
     // ── Configuration from editor ──────────────────────────────────────
-    this.endpointNode   = RED.nodes.getNode(config.endpoint);
-    this.name           = config.name || "";
+    this.endpointNode = RED.nodes.getNode(config.endpoint);
+    this.name = config.name || '';
 
     // Transport settings
-    this.useTransport     = config.useTransport === true;
-    this.maxChunkCount    = Number(config.maxChunkCount) || 1;
-    this.maxMessageSize   = Number(config.maxMessageSize) || 8192;
+    this.useTransport = config.useTransport === true;
+    this.maxChunkCount = Number(config.maxChunkCount) || 1;
+    this.maxMessageSize = Number(config.maxMessageSize) || 8192;
     this.receiveBufferSize = Number(config.receiveBufferSize) || 8192;
-    this.sendBufferSize   = Number(config.sendBufferSize) || 8192;
+    this.sendBufferSize = Number(config.sendBufferSize) || 8192;
 
     // Session settings
     this.keepSessionAlive = config.keepSessionAlive === true;
-    this.connectOnStart   = config.connectOnStart !== false;  // default: true
+    this.connectOnStart = config.connectOnStart !== false; // default: true
 
     // Client identity
-    this.applicationName = config.applicationName || "BRDK-NodeRED-OPCUA-Client";
-    this.applicationUri  = config.applicationUri || "";
+    this.applicationName = config.applicationName || 'BRDK-NodeRED-OPCUA-Client';
+    this.applicationUri = config.applicationUri || '';
 
     // ── Internal state ─────────────────────────────────────────────────
-    this.client       = null;          // OPCUAClient instance
-    this.session      = null;          // ClientSession instance
-    this.subscriptions  = new Map();   // configId → { subscription, monitoredItems: Map<nodeId, entry> }
-    this.cmdQueue       = [];          // Messages queued while connecting
-    this.currentStatus  = "";
-    this.hasConnected   = false;
-    this.isClosing      = false;
-    this.sessionReady   = false;       // True only after datatypes extracted and queue replayed
-    this.lastActivity   = 0;          // Timestamp of last session activity
+    this.client = null; // OPCUAClient instance
+    this.session = null; // ClientSession instance
+    this.subscriptions = new Map(); // configId → { subscription, monitoredItems: Map<nodeId, entry> }
+    this.cmdQueue = []; // Messages queued while connecting
+    this.currentStatus = '';
+    this.hasConnected = false;
+    this.isClosing = false;
+    this.sessionReady = false; // True only after datatypes extracted and queue replayed
+    this.lastActivity = 0; // Timestamp of last session activity
 
     // ── Validate endpoint ──────────────────────────────────────────────
     if (!this.endpointNode) {
-      setStatus("invalid endpoint");
+      setStatus('invalid endpoint');
       return;
     }
 
@@ -112,7 +114,7 @@ module.exports = function (RED) {
     //  INPUT HANDLER
     // ═══════════════════════════════════════════════════════════════════
 
-    node.on("input", (msg, send, done) => {
+    node.on('input', (msg, send, done) => {
       // Determine the action to perform
       const action = msg.action || msg.payload?.action;
 
@@ -130,7 +132,7 @@ module.exports = function (RED) {
     //  CLOSE HANDLER
     // ═══════════════════════════════════════════════════════════════════
 
-    node.on("close", async (done) => {
+    node.on('close', async (done) => {
       node.isClosing = true;
       try {
         await terminateSubscription();
@@ -185,16 +187,15 @@ module.exports = function (RED) {
         // Create the client
         node.client = opcua.OPCUAClient.create(clientOptions);
         registerClientEventHandlers();
-        
-        setStatus("client created");
+
+        setStatus('client created');
 
         // Connect immediately or wait for trigger
         if (node.connectOnStart) {
           await connectAndCreateSession();
         } else {
-          setStatus("waiting");
+          setStatus('waiting');
         }
-
       } catch (err) {
         handleConnectionError(err);
       }
@@ -204,16 +205,17 @@ module.exports = function (RED) {
      * Connect to the server and create a session.
      */
     async function connectAndCreateSession() {
-      if (node.currentStatus === "connecting") { //skip if is allready connecting
+      if (node.currentStatus === 'connecting') {
+        //skip if is allready connecting
         return;
       }
 
       const endpointUrl = node.endpointNode.endpoint;
 
-      setStatus("connecting");
+      setStatus('connecting');
       await node.client.connect(endpointUrl);
 
-      setStatus("connected");
+      setStatus('connected');
       node.hasConnected = true;
 
       const userIdentity = resolveUserIdentity(node.endpointNode);
@@ -221,20 +223,23 @@ module.exports = function (RED) {
 
       // Pre-load server type dictionaries so ExtensionObjects decode correctly
       try {
-        setStatus("extracting datatypes");
-        node.extraDataTypeManager = await getExtraDataTypeManager(node.session, DataTypeExtractStrategy.Both);
+        setStatus('extracting datatypes');
+        node.extraDataTypeManager = await getExtraDataTypeManager(
+          node.session,
+          DataTypeExtractStrategy.Both
+        );
       } catch (err) {
         node.warn(`Failed to load type dictionaries: ${err.message}`);
       }
 
-      setStatus("session active");
+      setStatus('session active');
       node.lastActivity = Date.now();
       node.sessionReady = true;
 
       // Register session close handler
-      node.session.on("session_closed", () => {
+      node.session.on('session_closed', () => {
         if (!node.isClosing) {
-          setStatus("session closed");
+          setStatus('session closed');
           node.sessionReady = false;
           node.session = null;
           node.subscriptions.clear();
@@ -248,11 +253,11 @@ module.exports = function (RED) {
     /**
      * Register event handlers on the OPC UA client for reconnection.
      */
-    
+
     function registerClientEventHandlers() {
-      node.client.on("connection_reestablished", () => {
+      node.client.on('connection_reestablished', () => {
         if (node.isClosing) return;
-        setStatus("re-established");
+        setStatus('re-established');
 
         // If session was lost, re-create it
         if (!node.session) {
@@ -260,22 +265,21 @@ module.exports = function (RED) {
         }
       });
 
-      node.client.on("backoff", (retryCount, delay) => {
+      node.client.on('backoff', (retryCount, delay) => {
         if (node.isClosing) return;
-        const label = node.hasConnected ? "reconnecting" : "connecting";
+        const label = node.hasConnected ? 'reconnecting' : 'connecting';
         const delaySec = (delay / 1000).toFixed(1);
         setStatusWithDetail(label, `attempt ${retryCount}, retry in ${delaySec}s`);
       });
 
-      node.client.on("start_reconnection", () => {
+      node.client.on('start_reconnection', () => {
         if (node.isClosing) return;
-        setStatus("reconnecting");
+        setStatus('reconnecting');
       });
-
 
       const WINDOW = 5000; // 5 seconds window to detect session timeout
 
-      node.client.on("connection_lost", () => {
+      node.client.on('connection_lost', () => {
         if (node.isClosing) return;
 
         // Detect inactivity timeout: if no request was made within the
@@ -285,11 +289,13 @@ module.exports = function (RED) {
         if (idleMs >= SESSION_TIMEOUT_MS - WINDOW && idleMs <= SESSION_TIMEOUT_MS + WINDOW) {
           closeSession()
             .then(() => disconnectClient())
-            .then(() => setStatusWithDetail("timed out", "idle too long, connection closed by server"));
+            .then(() =>
+              setStatusWithDetail('timed out', 'idle too long, connection closed by server')
+            );
           return;
         }
 
-        setStatus("disconnected");
+        setStatus('disconnected');
       });
     }
 
@@ -313,26 +319,26 @@ module.exports = function (RED) {
      */
     function routeAction(action, msg, send, done) {
       const handlers = {
-        read:                () => actionRead(msg, send, done),
-        write:               () => actionWrite(msg, send, done),
-        subscribe:           () => actionSubscribe(msg, send, done),
-        monitor:             () => actionMonitor(msg, send, done),
-        unsubscribe:         () => actionUnsubscribe(msg, send, done),
-        deletesubscription:  () => actionDeleteSubscription(msg, send, done),
-        browse:              () => actionBrowse(msg, send, done),
-        events:              () => actionEvents(msg, send, done),
-        info:                () => actionInfo(msg, send, done),
-        build:               () => actionBuild(msg, send, done),
-        register:            () => actionRegister(msg, send, done),
-        unregister:          () => actionUnregister(msg, send, done),
-        acknowledge:         () => actionAcknowledge(msg, send, done),
-        history:             () => actionHistory(msg, send, done),
-        readfile:            () => actionReadFile(msg, send, done),
-        writefile:           () => actionWriteFile(msg, send, done),
-        connect:             () => actionConnect(msg, send, done),
-        disconnect:          () => actionDisconnect(msg, send, done),
-        reconnect:           () => actionReconnect(msg, send, done),
-        method:              () => actionMethod(msg, send, done),
+        read: () => actionRead(msg, send, done),
+        write: () => actionWrite(msg, send, done),
+        subscribe: () => actionSubscribe(msg, send, done),
+        monitor: () => actionMonitor(msg, send, done),
+        unsubscribe: () => actionUnsubscribe(msg, send, done),
+        deletesubscription: () => actionDeleteSubscription(msg, send, done),
+        browse: () => actionBrowse(msg, send, done),
+        events: () => actionEvents(msg, send, done),
+        info: () => actionInfo(msg, send, done),
+        build: () => actionBuild(msg, send, done),
+        register: () => actionRegister(msg, send, done),
+        unregister: () => actionUnregister(msg, send, done),
+        acknowledge: () => actionAcknowledge(msg, send, done),
+        history: () => actionHistory(msg, send, done),
+        readfile: () => actionReadFile(msg, send, done),
+        writefile: () => actionWriteFile(msg, send, done),
+        connect: () => actionConnect(msg, send, done),
+        disconnect: () => actionDisconnect(msg, send, done),
+        reconnect: () => actionReconnect(msg, send, done),
+        method: () => actionMethod(msg, send, done),
       };
 
       const handler = handlers[action];
@@ -361,12 +367,12 @@ module.exports = function (RED) {
       try {
         const items = msg.items;
         if (!items?.length) {
-          node.warn("No items to read — msg.items is empty or missing");
+          node.warn('No items to read — msg.items is empty or missing');
           done();
           return;
         }
 
-        setStatus("reading");
+        setStatus('reading');
 
         const nodesToRead = items.map((item) => ({
           nodeId: item.nodeId,
@@ -378,22 +384,25 @@ module.exports = function (RED) {
         // Send a per-item message on output 1 (strip items from output)
         const { items: _items, ...baseMsgRead } = msg;
         for (let i = 0; i < dataValues.length; i++) {
-          const itemMsg = { ...baseMsgRead, ...converter.buildValueMessage(dataValues[i], items[i]) };
+          const itemMsg = {
+            ...baseMsgRead,
+            ...converter.buildValueMessage(dataValues[i], items[i]),
+          };
           send([itemMsg, null, null]);
         }
 
         // Send a batch message on output 3
         const batchMsg = {
-          topic: "read",
+          topic: 'read',
           items: items.map((item, i) => converter.buildValueMessage(dataValues[i], item)),
           payload: dataValues.map((dv, i) => converter.buildValueMessage(dv, items[i])),
         };
         send([null, null, batchMsg]);
 
-        setStatus("read done");
+        setStatus('read done');
         done();
       } catch (err) {
-        handleActionError("read error", err, msg, done);
+        handleActionError('read error', err, msg, done);
       }
     }
 
@@ -408,12 +417,12 @@ module.exports = function (RED) {
       try {
         const items = msg.items;
         if (!items?.length) {
-          node.warn("No items to write — msg.items is empty or missing");
+          node.warn('No items to write — msg.items is empty or missing');
           done();
           return;
         }
 
-        setStatus("writing");
+        setStatus('writing');
 
         const writeValues = items.map((item) => ({
           nodeId: item.nodeId,
@@ -430,11 +439,11 @@ module.exports = function (RED) {
         // Strip items from output
         const { items: _items, ...baseMsgWrite } = msg;
         const writeResult = { ...baseMsgWrite, payload: statusCodes };
-        setStatus("value written");
+        setStatus('value written');
         send([writeResult, null, null]);
         done();
       } catch (err) {
-        handleActionError("write error", err, msg, done);
+        handleActionError('write error', err, msg, done);
       }
     }
 
@@ -455,7 +464,7 @@ module.exports = function (RED) {
       try {
         const items = msg.items;
         if (!items?.length) {
-          node.warn("No items to subscribe — msg.items is empty or missing");
+          node.warn('No items to subscribe — msg.items is empty or missing');
           done();
           return;
         }
@@ -463,7 +472,7 @@ module.exports = function (RED) {
         const subConfigId = msg.subscriptionId;
         const subscription = ensureSubscription(msg);
         const subItems = getSubMonitoredItems(subConfigId);
-        setStatus("subscribing");
+        setStatus('subscribing');
 
         const samplingInterval = resolveSamplingInterval(msg);
         const queueSize = resolveQueueSize(msg);
@@ -473,7 +482,11 @@ module.exports = function (RED) {
           // Terminate existing monitored item if re-subscribing same nodeId
           const existing = subItems.get(item.nodeId);
           if (existing) {
-            try { await existing.terminate(); } catch { /* may already be terminated */ }
+            try {
+              await existing.terminate();
+            } catch {
+              /* may already be terminated */
+            }
           }
 
           const monitoredItem = opcua.ClientMonitoredItem.create(
@@ -483,23 +496,23 @@ module.exports = function (RED) {
             opcua.TimestampsToReturn.Both
           );
 
-          monitoredItem.on("changed", (dataValue) => {
+          monitoredItem.on('changed', (dataValue) => {
             const outMsg = converter.buildValueMessage(dataValue, item);
-            setSubscribedStatus("value changed");
+            setSubscribedStatus('value changed');
             node.send([outMsg, null, null]);
           });
 
-          monitoredItem.on("err", (errStr) => {
+          monitoredItem.on('err', (errStr) => {
             node.error(`Monitored item error: ${errStr}`, msg);
           });
 
           subItems.set(item.nodeId, monitoredItem);
         }
 
-        setSubscribedStatus("ready");
+        setSubscribedStatus('ready');
         done();
       } catch (err) {
-        handleActionError("subscription error", err, msg, done);
+        handleActionError('subscription error', err, msg, done);
       }
     }
 
@@ -514,7 +527,7 @@ module.exports = function (RED) {
       try {
         const items = msg.items;
         if (!items?.length) {
-          node.warn("No items to monitor — msg.items is empty or missing");
+          node.warn('No items to monitor — msg.items is empty or missing');
           done();
           return;
         }
@@ -522,7 +535,7 @@ module.exports = function (RED) {
         const subConfigId = msg.subscriptionId;
         const subscription = ensureSubscription(msg);
         const subItems = getSubMonitoredItems(subConfigId);
-        setStatus("monitoring");
+        setStatus('monitoring');
 
         const samplingInterval = resolveSamplingInterval(msg);
         const queueSize = resolveQueueSize(msg);
@@ -531,15 +544,18 @@ module.exports = function (RED) {
         // Resolve deadband settings
         const dbType = msg.deadbandType;
         const dbValue = msg.deadbandValue;
-        const deadbandType = dbType === "p"
-          ? opcua.DeadbandType.Percent
-          : opcua.DeadbandType.Absolute;
+        const deadbandType =
+          dbType === 'p' ? opcua.DeadbandType.Percent : opcua.DeadbandType.Absolute;
 
         for (const item of items) {
           // Terminate existing monitored item if re-subscribing same nodeId
           const existing = subItems.get(item.nodeId);
           if (existing) {
-            try { await existing.terminate(); } catch { /* may already be terminated */ }
+            try {
+              await existing.terminate();
+            } catch {
+              /* may already be terminated */
+            }
           }
 
           const monitoredItem = opcua.ClientMonitoredItem.create(
@@ -558,23 +574,23 @@ module.exports = function (RED) {
             opcua.TimestampsToReturn.Both
           );
 
-          monitoredItem.on("changed", (dataValue) => {
+          monitoredItem.on('changed', (dataValue) => {
             const outMsg = converter.buildValueMessage(dataValue, item);
-            setSubscribedStatus("value changed");
+            setSubscribedStatus('value changed');
             node.send([outMsg, null, null]);
           });
 
-          monitoredItem.on("err", (errStr) => {
+          monitoredItem.on('err', (errStr) => {
             node.error(`Monitored item error: ${errStr}`, msg);
           });
 
           subItems.set(item.nodeId, monitoredItem);
         }
 
-        setSubscribedStatus("ready");
+        setSubscribedStatus('ready');
         done();
       } catch (err) {
-        handleActionError("subscription error", err, msg, done);
+        handleActionError('subscription error', err, msg, done);
       }
     }
 
@@ -590,7 +606,7 @@ module.exports = function (RED) {
       let count = 0;
 
       if (subConfigId && !node.subscriptions.has(subConfigId)) {
-        node.warn("Subscription is not active — nothing to unsubscribe from");
+        node.warn('Subscription is not active — nothing to unsubscribe from');
         done();
         return;
       }
@@ -622,16 +638,20 @@ module.exports = function (RED) {
       // Auto-delete subscriptions that no longer have any monitored items
       for (const [configId, subEntry] of [...node.subscriptions.entries()]) {
         if (subEntry.monitoredItems.size === 0) {
-          try { await subEntry.subscription.terminate(); } catch { /* may already be terminated */ }
+          try {
+            await subEntry.subscription.terminate();
+          } catch {
+            /* may already be terminated */
+          }
           node.subscriptions.delete(configId);
         }
       }
 
       const total = totalMonitoredItems();
       if (total === 0) {
-        setStatus("session active");
+        setStatus('session active');
       } else {
-        setSubscribedStatus("Unsubscribed");
+        setSubscribedStatus('Unsubscribed');
       }
       send([msg, null, null]);
       done();
@@ -643,22 +663,22 @@ module.exports = function (RED) {
     async function actionDeleteSubscription(msg, send, done) {
       try {
         if (!msg.subscriptionId) {
-          node.warn("No subscription specified — select a Subscription config in the Action node");
+          node.warn('No subscription specified — select a Subscription config in the Action node');
           done();
           return;
         }
         if (!node.subscriptions.has(msg.subscriptionId)) {
-          node.warn("Subscription is not active — nothing to delete");
+          node.warn('Subscription is not active — nothing to delete');
           done();
           return;
         }
         await terminateSubscription(msg.subscriptionId);
-        msg.payload = "Subscription deleted";
+        msg.payload = 'Subscription deleted';
         const total = totalMonitoredItems();
         if (total === 0) {
-          setStatus("session active");
+          setStatus('session active');
         } else {
-          setSubscribedStatus("deleted");
+          setSubscribedStatus('deleted');
         }
         send([msg, null, null]);
       } catch (err) {
@@ -686,9 +706,9 @@ module.exports = function (RED) {
       if (!assertSession(msg, done)) return;
 
       try {
-        setStatus("browsing");
+        setStatus('browsing');
 
-        const startNodeId = resolveNodeId(msg) || "ns=0;i=85";
+        const startNodeId = resolveNodeId(msg) || 'ns=0;i=85';
         const maxDepth = Number(msg.maxDepth) || 1;
 
         const tree = await browseLevel(startNodeId, 1, maxDepth);
@@ -696,7 +716,7 @@ module.exports = function (RED) {
         if (tree.length === 0) {
           msg.payload = [];
           send([msg, null, null]);
-          setStatusWithDetail("browse done", "0 items");
+          setStatusWithDetail('browse done', '0 items');
           done();
           return;
         }
@@ -714,10 +734,10 @@ module.exports = function (RED) {
         }
 
         const count = countTreeNodes(tree);
-        setStatusWithDetail("browse done", `${count} items`);
+        setStatusWithDetail('browse done', `${count} items`);
         done();
       } catch (err) {
-        handleActionError("browse error", err, msg, done);
+        handleActionError('browse error', err, msg, done);
       }
     }
 
@@ -734,9 +754,9 @@ module.exports = function (RED) {
       const browseResult = await node.session.browse({
         nodeId,
         browseDirection: opcua.BrowseDirection.Forward,
-        referenceTypeId: "HierarchicalReferences",
+        referenceTypeId: 'HierarchicalReferences',
         includeSubtypes: true,
-        resultMask: 0x3F,
+        resultMask: 0x3f,
       });
 
       const references = browseResult.references || [];
@@ -744,16 +764,16 @@ module.exports = function (RED) {
 
       for (const ref of references) {
         const entry = {
-          browseName:     ref.browseName?.name || ref.browseName?.toString() || "",
-          nodeId:         ref.nodeId.toString(),
-          displayName:    ref.displayName?.text || "",
-          nodeClass:      opcua.NodeClass[ref.nodeClass] || String(ref.nodeClass),
-          typeDefinition: ref.typeDefinition?.toString() || "",
-          isVariable:     ref.nodeClass === opcua.NodeClass.Variable,
-          value:          null,
-          dataType:       "",
+          browseName: ref.browseName?.name || ref.browseName?.toString() || '',
+          nodeId: ref.nodeId.toString(),
+          displayName: ref.displayName?.text || '',
+          nodeClass: opcua.NodeClass[ref.nodeClass] || String(ref.nodeClass),
+          typeDefinition: ref.typeDefinition?.toString() || '',
+          isVariable: ref.nodeClass === opcua.NodeClass.Variable,
+          value: null,
+          dataType: '',
           depth,
-          children:       [],
+          children: [],
         };
 
         // Read Value + DataType for Variable nodes
@@ -825,7 +845,7 @@ module.exports = function (RED) {
       if (!assertSession(msg, done)) return;
 
       try {
-        setStatus("reading");
+        setStatus('reading');
 
         // Multi-item path
         if (msg.items?.length) {
@@ -849,7 +869,7 @@ module.exports = function (RED) {
 
           // Batch message on output 3
           const batchMsg = {
-            topic: "info",
+            topic: 'info',
             items: results.map((r) => ({
               nodeId: r.item.nodeId,
               datatype: r.item.datatype,
@@ -860,7 +880,7 @@ module.exports = function (RED) {
           };
           send([null, null, batchMsg]);
 
-          setStatusWithDetail("read done", `${results.length} items`);
+          setStatusWithDetail('read done', `${results.length} items`);
           done();
           return;
         }
@@ -873,7 +893,7 @@ module.exports = function (RED) {
         send([msg, null, null]);
         done();
       } catch (err) {
-        handleActionError("read error", err, msg, done);
+        handleActionError('read error', err, msg, done);
       }
     }
 
@@ -891,19 +911,23 @@ module.exports = function (RED) {
         const subConfigId = msg.subscriptionId;
         const subscription = ensureSubscription(msg);
         const subItems = getSubMonitoredItems(subConfigId);
-        setStatus("subscribing");
+        setStatus('subscribing');
 
         // Build event filter fields
         const baseFields = [
-          "SourceName", "EventId", "ReceiveTime", "Severity",
-          "Message", "ConditionName", "ConditionType",
+          'SourceName',
+          'EventId',
+          'ReceiveTime',
+          'Severity',
+          'Message',
+          'ConditionName',
+          'ConditionType',
         ];
         const customFields = msg.customEventFields || [];
         const allFields = [...baseFields, ...customFields];
         const eventFilter = opcua.constructEventFilter(allFields);
 
-        const eventNodeId = resolveNodeId(msg) || "i=2253"; // Default: Server object
-        const eventTypeIds = msg.eventTypeIds || "i=2041"; // Default: BaseEvent
+        const eventNodeId = resolveNodeId(msg) || 'i=2253'; // Default: Server object
         const discardOldest = resolveDiscardOldest(msg);
 
         const monitoredItem = opcua.ClientMonitoredItem.create(
@@ -920,7 +944,7 @@ module.exports = function (RED) {
           }
         );
 
-        monitoredItem.on("changed", (eventFields) => {
+        monitoredItem.on('changed', (eventFields) => {
           // Map field names to values
           const eventData = {};
           allFields.forEach((fieldName, i) => {
@@ -933,19 +957,19 @@ module.exports = function (RED) {
             payload: eventData,
             eventFields,
           };
-          setSubscribedStatus("event received");
+          setSubscribedStatus('event received');
           node.send([outMsg, null, null]);
         });
 
-        monitoredItem.on("err", (errStr) => {
+        monitoredItem.on('err', (errStr) => {
           node.error(`Event monitor error: ${errStr}`, msg);
         });
 
         subItems.set(`event:${eventNodeId}`, monitoredItem);
-        setSubscribedStatus("ready");
+        setSubscribedStatus('ready');
         done();
       } catch (err) {
-        handleActionError("subscription error", err, msg, done);
+        handleActionError('subscription error', err, msg, done);
       }
     }
 
@@ -956,23 +980,19 @@ module.exports = function (RED) {
       if (!assertSession(msg, done)) return;
 
       try {
-        setStatus("acknowledging");
+        setStatus('acknowledging');
 
         const conditionId = opcua.coerceNodeId(msg.conditionId);
         const eventId = msg.eventId;
-        const comment = msg.comment || "Acknowledged from Node-RED";
+        const comment = msg.comment || 'Acknowledged from Node-RED';
 
-        const statusCode = await node.session.acknowledgeCondition(
-          conditionId,
-          eventId,
-          comment
-        );
+        const statusCode = await node.session.acknowledgeCondition(conditionId, eventId, comment);
 
         msg.payload = statusCode;
         send([msg, null, null]);
         done();
       } catch (err) {
-        handleActionError("error", err, msg, done);
+        handleActionError('error', err, msg, done);
       }
     }
 
@@ -991,19 +1011,19 @@ module.exports = function (RED) {
       if (!assertSession(msg, done)) return;
 
       try {
-        setStatus("reading");
+        setStatus('reading');
 
         const start = msg.start ? new Date(msg.start) : new Date(Date.now() - 3600000);
         const end = msg.end ? new Date(msg.end) : new Date();
-        const aggregate = msg.aggregate || "raw";
+        const aggregate = msg.aggregate || 'raw';
         const numValuesPerNode = msg.numValuesPerNode || 1000;
         const returnBounds = msg.returnBounds || false;
         const processingInterval = msg.processingInterval || 3600000;
 
         const aggregateMap = {
-          min:           opcua.AggregateFunction.Minimum,
-          max:           opcua.AggregateFunction.Maximum,
-          ave:           opcua.AggregateFunction.Average,
+          min: opcua.AggregateFunction.Minimum,
+          max: opcua.AggregateFunction.Maximum,
+          ave: opcua.AggregateFunction.Average,
           interpolative: opcua.AggregateFunction.Interpolative,
         };
 
@@ -1011,15 +1031,19 @@ module.exports = function (RED) {
          * Read history for a single nodeId.
          */
         async function readHistoryForNode(nodeId) {
-          if (aggregate === "raw") {
-            return node.session.readHistoryValue(
-              nodeId, start, end,
-              { numValuesPerNode, returnBounds }
-            );
+          if (aggregate === 'raw') {
+            return node.session.readHistoryValue(nodeId, start, end, {
+              numValuesPerNode,
+              returnBounds,
+            });
           }
           const aggregateFn = aggregateMap[aggregate] || opcua.AggregateFunction.Average;
           return node.session.readAggregateValue(
-            { nodeId }, start, end, aggregateFn, processingInterval
+            { nodeId },
+            start,
+            end,
+            aggregateFn,
+            processingInterval
           );
         }
 
@@ -1045,7 +1069,7 @@ module.exports = function (RED) {
 
           // Batch message on output 3
           const batchMsg = {
-            topic: "history",
+            topic: 'history',
             items: results.map((r) => ({
               nodeId: r.item.nodeId,
               datatype: r.item.datatype,
@@ -1056,7 +1080,7 @@ module.exports = function (RED) {
           };
           send([null, null, batchMsg]);
 
-          setStatusWithDetail("read done", `${results.length} items`);
+          setStatusWithDetail('read done', `${results.length} items`);
           done();
           return;
         }
@@ -1069,7 +1093,7 @@ module.exports = function (RED) {
         send([msg, null, null]);
         done();
       } catch (err) {
-        handleActionError("read error", err, msg, done);
+        handleActionError('read error', err, msg, done);
       }
     }
 
@@ -1084,7 +1108,7 @@ module.exports = function (RED) {
       if (!assertSession(msg, done)) return;
 
       try {
-        setStatus("reading");
+        setStatus('reading');
 
         const fileNodeId = resolveNodeId(msg);
         const file = new ClientFile(node.session, opcua.coerceNodeId(fileNodeId));
@@ -1099,7 +1123,7 @@ module.exports = function (RED) {
         send([msg, null, null]);
         done();
       } catch (err) {
-        handleActionError("read error", err, msg, done);
+        handleActionError('read error', err, msg, done);
       }
     }
 
@@ -1110,7 +1134,7 @@ module.exports = function (RED) {
       if (!assertSession(msg, done)) return;
 
       try {
-        setStatus("writing");
+        setStatus('writing');
 
         const fileNodeId = resolveNodeId(msg);
         const file = new ClientFile(node.session, opcua.coerceNodeId(fileNodeId));
@@ -1131,11 +1155,11 @@ module.exports = function (RED) {
         await file.close(handle);
 
         msg.payload = true;
-        setStatus("value written");
+        setStatus('value written');
         send([msg, null, null]);
         done();
       } catch (err) {
-        handleActionError("write error", err, msg, done);
+        handleActionError('write error', err, msg, done);
       }
     }
 
@@ -1150,23 +1174,23 @@ module.exports = function (RED) {
       if (!assertSession(msg, done)) return;
 
       try {
-        setStatus("calling method");
+        setStatus('calling method');
 
         const objectId = opcua.coerceNodeId(msg.objectId);
         const methodId = opcua.coerceNodeId(msg.methodId);
 
         // Build input arguments (supports ExtensionObject with typeid)
         const inputArgs = [];
-        for (const arg of (msg.inputArguments || [])) {
+        for (const arg of msg.inputArguments || []) {
           const dataType = converter.toOpcuaDataType(arg.dataType);
           let value;
 
-          if (arg.dataType === "ExtensionObject" && arg.typeid) {
+          if (arg.dataType === 'ExtensionObject' && arg.typeid) {
             // Construct a schema-aware ExtensionObject via the session
-            const rawVal = typeof arg.value === "string" ? JSON.parse(arg.value) : (arg.value || {});
+            const rawVal = typeof arg.value === 'string' ? JSON.parse(arg.value) : arg.value || {};
             value = await node.session.constructExtensionObject(
               opcua.coerceNodeId(arg.typeid),
-              rawVal,
+              rawVal
             );
           } else {
             value = converter.coerceScalarValue(arg.dataType, arg.value);
@@ -1185,15 +1209,16 @@ module.exports = function (RED) {
 
         msg.result = result;
         msg.output = result.outputArguments;
-        msg.payload = result.outputArguments?.length === 1
-          ? result.outputArguments[0].value
-          : result.outputArguments?.map((a) => a.value);
+        msg.payload =
+          result.outputArguments?.length === 1
+            ? result.outputArguments[0].value
+            : result.outputArguments?.map((a) => a.value);
 
-        setStatus("method executed");
+        setStatus('method executed');
         send([msg, null, null]);
         done();
       } catch (err) {
-        handleActionError("method error", err, msg, done);
+        handleActionError('method error', err, msg, done);
       }
     }
 
@@ -1215,7 +1240,7 @@ module.exports = function (RED) {
         );
 
         // Merge payload properties over defaults
-        if (msg.payload && typeof msg.payload === "object") {
+        if (msg.payload && typeof msg.payload === 'object') {
           Object.assign(extensionObject, msg.payload);
         }
 
@@ -1223,7 +1248,7 @@ module.exports = function (RED) {
         send([msg, null, null]);
         done();
       } catch (err) {
-        handleActionError("error", err, msg, done);
+        handleActionError('error', err, msg, done);
       }
     }
 
@@ -1242,7 +1267,7 @@ module.exports = function (RED) {
       try {
         const items = msg.items;
         if (!items?.length) {
-          node.warn("No items to register — msg.items is empty or missing");
+          node.warn('No items to register — msg.items is empty or missing');
           done();
           return;
         }
@@ -1254,7 +1279,7 @@ module.exports = function (RED) {
         send([msg, null, null]);
         done();
       } catch (err) {
-        handleActionError("error", err, msg, done);
+        handleActionError('error', err, msg, done);
       }
     }
 
@@ -1269,7 +1294,7 @@ module.exports = function (RED) {
       try {
         const items = msg.items;
         if (!items?.length) {
-          node.warn("No items to unregister — msg.items is empty or missing");
+          node.warn('No items to unregister — msg.items is empty or missing');
           done();
           return;
         }
@@ -1277,11 +1302,11 @@ module.exports = function (RED) {
         const nodeIds = items.map((item) => item.nodeId);
         await node.session.unregisterNodes(nodeIds);
 
-        msg.payload = "Nodes unregistered";
+        msg.payload = 'Nodes unregistered';
         send([msg, null, null]);
         done();
       } catch (err) {
-        handleActionError("error", err, msg, done);
+        handleActionError('error', err, msg, done);
       }
     }
 
@@ -1331,11 +1356,11 @@ module.exports = function (RED) {
     async function actionConnect(msg, send, done) {
       try {
         await resetAndConnect(msg);
-        msg.payload = "Connected";
+        msg.payload = 'Connected';
         send([msg, null, null]);
         done();
       } catch (err) {
-        handleActionError("error", err, msg, done);
+        handleActionError('error', err, msg, done);
       }
     }
 
@@ -1348,12 +1373,12 @@ module.exports = function (RED) {
         await closeSession();
         await disconnectClient();
 
-        msg.payload = "Disconnected";
-        setStatus("disconnected");
+        msg.payload = 'Disconnected';
+        setStatus('disconnected');
         send([msg, null, null]);
         done();
       } catch (err) {
-        handleActionError("error", err, msg, done);
+        handleActionError('error', err, msg, done);
       }
     }
 
@@ -1364,11 +1389,11 @@ module.exports = function (RED) {
     async function actionReconnect(msg, send, done) {
       try {
         await resetAndConnect(msg);
-        msg.payload = "Reconnected";
+        msg.payload = 'Reconnected';
         send([msg, null, null]);
         done();
       } catch (err) {
-        handleActionError("error", err, msg, done);
+        handleActionError('error', err, msg, done);
       }
     }
 
@@ -1389,7 +1414,7 @@ module.exports = function (RED) {
     function ensureSubscription(msg) {
       const subConfigId = msg.subscriptionId;
       if (!subConfigId) {
-        throw new Error("No subscription configured. Select a Subscription config node.");
+        throw new Error('No subscription configured. Select a Subscription config node.');
       }
 
       const existing = node.subscriptions.get(subConfigId);
@@ -1414,23 +1439,23 @@ module.exports = function (RED) {
       const subEntry = { subscription, monitoredItems: new Map() };
       node.subscriptions.set(subConfigId, subEntry);
 
-      subscription.on("started", () => {
+      subscription.on('started', () => {
         // Status is set by the calling action (subscribe/monitor/events)
       });
 
-      subscription.on("keepalive", () => {
-        setSubscribedStatus("keepalive");
+      subscription.on('keepalive', () => {
+        setSubscribedStatus('keepalive');
       });
 
-      subscription.on("terminated", () => {
+      subscription.on('terminated', () => {
         node.subscriptions.delete(subConfigId);
         if (node.subscriptions.size === 0) {
-          setStatus("terminated");
+          setStatus('terminated');
         }
       });
 
-      subscription.on("error", (err) => {
-        setStatus("subscription error");
+      subscription.on('error', (err) => {
+        setStatus('subscription error');
         node.error(`Subscription error: ${err.message}`);
       });
 
@@ -1491,13 +1516,21 @@ module.exports = function (RED) {
         // Terminate a specific subscription
         const entry = node.subscriptions.get(subConfigId);
         if (entry) {
-          try { await entry.subscription.terminate(); } catch { /* may already be terminated */ }
+          try {
+            await entry.subscription.terminate();
+          } catch {
+            /* may already be terminated */
+          }
           node.subscriptions.delete(subConfigId);
         }
       } else {
         // Terminate all subscriptions
         for (const [, entry] of node.subscriptions) {
-          try { await entry.subscription.terminate(); } catch { /* may already be terminated */ }
+          try {
+            await entry.subscription.terminate();
+          } catch {
+            /* may already be terminated */
+          }
         }
         node.subscriptions.clear();
       }
@@ -1546,7 +1579,7 @@ module.exports = function (RED) {
      */
     function shouldQueueMessage(action) {
       // Connection control actions should never be queued
-      if (["connect", "disconnect", "reconnect"].includes(action)) return false;
+      if (['connect', 'disconnect', 'reconnect'].includes(action)) return false;
 
       // If connectOnStart is false and session hasn't been established yet, trigger lazy connect
       if (!node.session && node.client && !node.connectOnStart && !node.hasConnected) {
@@ -1572,8 +1605,8 @@ module.exports = function (RED) {
     function assertSession(msg, done) {
       if (node.session && !node.session.isReconnecting) return true;
 
-      setStatus("no session");
-      node.error("No active OPC UA session", msg);
+      setStatus('no session');
+      node.error('No active OPC UA session', msg);
       done();
       return false;
     }
@@ -1591,10 +1624,10 @@ module.exports = function (RED) {
       if (msg.items?.length > 1) {
         node.warn(
           `Action "${msg.action}" uses a single node — only the first item ` +
-          `(${msg.items[0].nodeId}) will be used, ${msg.items.length - 1} item(s) ignored`
+            `(${msg.items[0].nodeId}) will be used, ${msg.items.length - 1} item(s) ignored`
         );
       }
-      return msg.items?.[0]?.nodeId || "";
+      return msg.items?.[0]?.nodeId || '';
     }
 
     // ─── Status helpers ──────────────────────────────────────────────
@@ -1608,11 +1641,12 @@ module.exports = function (RED) {
       node.status(status);
 
       // Send status notification on output 2
-      const isError = statusKey.includes("error") || statusKey === "disconnected" || statusKey === "terminated";
+      const isError =
+        statusKey.includes('error') || statusKey === 'disconnected' || statusKey === 'terminated';
       const statusMsg = {
         payload: statusKey,
         error: isError ? statusKey : null,
-        endpoint: node.endpointNode?.endpoint || "",
+        endpoint: node.endpointNode?.endpoint || '',
         status: statusKey,
       };
       node.send([null, statusMsg, null]);
@@ -1625,7 +1659,7 @@ module.exports = function (RED) {
     function setSubscribedStatus(lastEvent) {
       const count = totalMonitoredItems();
       const detail = `${count} item(s) | ${lastEvent}`;
-      setStatusWithDetail("subscribed", detail);
+      setStatusWithDetail('subscribed', detail);
     }
 
     /**
@@ -1637,12 +1671,13 @@ module.exports = function (RED) {
       node.status(status);
 
       // Send status notification on output 2
-      const isError = statusKey.includes("error") || statusKey === "disconnected" || statusKey === "terminated";
+      const isError =
+        statusKey.includes('error') || statusKey === 'disconnected' || statusKey === 'terminated';
       const statusMsg = {
         payload: statusKey,
         detail,
         error: isError ? statusKey : null,
-        endpoint: node.endpointNode?.endpoint || "",
+        endpoint: node.endpointNode?.endpoint || '',
         status: statusKey,
       };
       node.send([null, statusMsg, null]);
@@ -1662,14 +1697,14 @@ module.exports = function (RED) {
      */
     function handleConnectionError(err) {
       const message = err.message || String(err);
-      if (message.includes("certificate")) {
-        setStatus("invalid certificate");
+      if (message.includes('certificate')) {
+        setStatus('invalid certificate');
       } else {
-        setStatusWithDetail("error", message);
+        setStatusWithDetail('error', message);
       }
       node.error(`Connection error: ${message}`);
     }
   }
 
-  RED.nodes.registerType("opcua-client", OpcUaClientNode);
+  RED.nodes.registerType('opcua-client', OpcUaClientNode);
 };

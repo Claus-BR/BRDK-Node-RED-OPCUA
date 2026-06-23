@@ -14,44 +14,44 @@
      1. NODE REGISTRATION
      ═══════════════════════════════════════════════════════════════════════ -->
 <script type="text/javascript">
-  RED.nodes.registerType("opcua-client", {
-    category: "BRDK OPCUA",
-    color: "#3FADB5",
+  RED.nodes.registerType('opcua-client', {
+    category: 'BRDK OPCUA',
+    color: '#3FADB5',
     defaults: {
-      endpoint:         { value: "", type: "opcua-endpoint", required: true },
-      name:             { value: "" },
+      endpoint: { value: '', type: 'opcua-endpoint', required: true },
+      name: { value: '' },
       // Transport settings
-      useTransport:     { value: false },
-      maxChunkCount:    { value: 1 },
-      maxMessageSize:   { value: 8192 },
+      useTransport: { value: false },
+      maxChunkCount: { value: 1 },
+      maxMessageSize: { value: 8192 },
       receiveBufferSize: { value: 8192 },
-      sendBufferSize:   { value: 8192 },
+      sendBufferSize: { value: 8192 },
       // Session settings
       keepSessionAlive: { value: false },
-      connectOnStart:   { value: true },
+      connectOnStart: { value: true },
       // Client identity
-      applicationName:  { value: "" },
-      applicationUri:   { value: "" },
+      applicationName: { value: '' },
+      applicationUri: { value: '' },
     },
     inputs: 1,
     outputs: 3,
-    icon: "font-awesome/fa-cogs",
+    icon: 'font-awesome/fa-cogs',
     label: function () {
-      return this.name || "opcua client";
+      return this.name || 'opcua client';
     },
     labelStyle: function () {
-      return this.name ? "node_label_italic" : "";
+      return this.name ? 'node_label_italic' : '';
     },
-    paletteLabel: "opcua client",
-    outputLabels: ["data", "status", "batch"],
+    paletteLabel: 'opcua client',
+    outputLabels: ['data', 'status', 'batch'],
 
     oneditprepare: function () {
       function updateVisibility() {
-        var showTransport = $("#node-input-useTransport").prop("checked");
-        $(".transport-row").toggle(showTransport);
+        var showTransport = $('#node-input-useTransport').prop('checked');
+        $('.transport-row').toggle(showTransport);
       }
 
-      $("#node-input-useTransport").on("change", updateVisibility);
+      $('#node-input-useTransport').on('change', updateVisibility);
       updateVisibility();
     },
   });
@@ -61,25 +61,24 @@
      2. EDIT TEMPLATE
      ═══════════════════════════════════════════════════════════════════════ -->
 <script type="text/html" data-template-name="opcua-client">
-
   <!-- Endpoint -->
   <div class="form-row">
     <label for="node-input-endpoint"><i class="fa fa-globe"></i> Endpoint</label>
-    <input type="text" id="node-input-endpoint">
+    <input type="text" id="node-input-endpoint" />
   </div>
 
-  <hr>
+  <hr />
 
   <!-- Session settings -->
   <div class="form-row">
     <label style="width: auto;">
-      <input type="checkbox" id="node-input-connectOnStart" style="width: auto;">
+      <input type="checkbox" id="node-input-connectOnStart" style="width: auto;" />
       Connect on start
     </label>
   </div>
   <div class="form-row">
     <label style="width: auto;">
-      <input type="checkbox" id="node-input-keepSessionAlive" style="width: auto;">
+      <input type="checkbox" id="node-input-keepSessionAlive" style="width: auto;" />
       Keep session alive
     </label>
   </div>
@@ -87,7 +86,7 @@
   <!-- Transport settings toggle -->
   <div class="form-row">
     <label style="width: auto;">
-      <input type="checkbox" id="node-input-useTransport" style="width: auto;">
+      <input type="checkbox" id="node-input-useTransport" style="width: auto;" />
       Custom transport settings
     </label>
   </div>
@@ -95,58 +94,60 @@
   <!-- Transport settings (shown when checkbox is checked) -->
   <div class="form-row transport-row" style="display: none;">
     <label for="node-input-maxChunkCount">Max Chunk Count</label>
-    <input type="number" id="node-input-maxChunkCount" min="1">
+    <input type="number" id="node-input-maxChunkCount" min="1" />
   </div>
   <div class="form-row transport-row" style="display: none;">
     <label for="node-input-maxMessageSize">Max Message Size</label>
-    <input type="number" id="node-input-maxMessageSize" min="1024">
+    <input type="number" id="node-input-maxMessageSize" min="1024" />
   </div>
   <div class="form-row transport-row" style="display: none;">
     <label for="node-input-receiveBufferSize">Receive Buffer</label>
-    <input type="number" id="node-input-receiveBufferSize" min="1024">
+    <input type="number" id="node-input-receiveBufferSize" min="1024" />
   </div>
   <div class="form-row transport-row" style="display: none;">
     <label for="node-input-sendBufferSize">Send Buffer</label>
-    <input type="number" id="node-input-sendBufferSize" min="1024">
+    <input type="number" id="node-input-sendBufferSize" min="1024" />
   </div>
 
-  <hr>
+  <hr />
 
   <!-- Client identity -->
   <div class="form-row">
     <label for="node-input-applicationName"><i class="fa fa-id-card"></i> App Name</label>
-    <input type="text" id="node-input-applicationName" placeholder="BRDK-NodeRED-OPCUA-Client">
+    <input type="text" id="node-input-applicationName" placeholder="BRDK-NodeRED-OPCUA-Client" />
   </div>
   <div class="form-row">
     <label for="node-input-applicationUri"><i class="fa fa-link"></i> App URI</label>
-    <input type="text" id="node-input-applicationUri" placeholder="(auto-generated)">
+    <input type="text" id="node-input-applicationUri" placeholder="(auto-generated)" />
   </div>
 
   <!-- Node name -->
   <div class="form-row">
     <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
-    <input type="text" id="node-input-name" placeholder="Name">
+    <input type="text" id="node-input-name" placeholder="Name" />
   </div>
-
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
      3. HELP TEXT
      ═══════════════════════════════════════════════════════════════════════ -->
 <script type="text/html" data-help-name="opcua-client">
-  <p>Connects to an OPC UA server and performs read, write, subscribe, browse, method call, and other operations.</p>
+  <p>
+    Connects to an OPC UA server and performs read, write, subscribe, browse, method call, and other
+    operations.
+  </p>
 
   <h3>Inputs</h3>
   <dl class="message-properties">
     <dt class="optional">action <span class="property-type">string</span></dt>
-    <dd>Override the node's configured action at runtime. One of:
-    <code>read</code>, <code>write</code>, <code>subscribe</code>, <code>monitor</code>,
-    <code>unsubscribe</code>, <code>deletesubscription</code>, <code>browse</code>,
-    <code>events</code>, <code>info</code>, <code>build</code>,
-    <code>register</code>, <code>unregister</code>,
-    <code>acknowledge</code>, <code>history</code>, <code>readfile</code>,
-    <code>writefile</code>, <code>connect</code>, <code>disconnect</code>,
-    <code>reconnect</code>, <code>method</code>.</dd>
+    <dd>
+      Override the node's configured action at runtime. One of: <code>read</code>,
+      <code>write</code>, <code>subscribe</code>, <code>monitor</code>, <code>unsubscribe</code>,
+      <code>deletesubscription</code>, <code>browse</code>, <code>events</code>, <code>info</code>,
+      <code>build</code>, <code>register</code>, <code>unregister</code>, <code>acknowledge</code>,
+      <code>history</code>, <code>readfile</code>, <code>writefile</code>, <code>connect</code>,
+      <code>disconnect</code>, <code>reconnect</code>, <code>method</code>.
+    </dd>
 
     <dt>topic <span class="property-type">string</span></dt>
     <dd>The OPC UA NodeId to operate on (e.g. <code>ns=2;s=Temperature</code>).</dd>
@@ -160,7 +161,8 @@
 
   <h3>Outputs</h3>
   <ol class="node-ports">
-    <li>Data
+    <li>
+      Data
       <dl class="message-properties">
         <dt>payload <span class="property-type">any</span></dt>
         <dd>Read value, write status code, browse results, event data, or method output.</dd>
@@ -172,7 +174,8 @@
         <dd>Source timestamp of the value.</dd>
       </dl>
     </li>
-    <li>Status
+    <li>
+      Status
       <dl class="message-properties">
         <dt>status <span class="property-type">string</span></dt>
         <dd>Current node status (e.g. "connected", "reading", "error").</dd>
@@ -182,7 +185,8 @@
         <dd>Error description (null when no error).</dd>
       </dl>
     </li>
-    <li>Batch
+    <li>
+      Batch
       <dl class="message-properties">
         <dt>payload <span class="property-type">array</span></dt>
         <dd>All values from a read operation.</dd>
@@ -193,41 +197,64 @@
   </ol>
 
   <h3>Details</h3>
-  <p>This node connects to an OPC UA server (configured via the Endpoint config node)
-  and performs the selected action. The action can be set in the node configuration or
-  overridden per-message via <code>msg.action</code>.</p>
+  <p>
+    This node connects to an OPC UA server (configured via the Endpoint config node) and performs
+    the selected action. The action can be set in the node configuration or overridden per-message
+    via <code>msg.action</code>.
+  </p>
 
   <h4>Data Access</h4>
   <ul>
-    <li><b>Read</b> — reads the values of nodes specified in <code>msg.items</code>. Sends per-item results on output 1 and batch results on output 3.</li>
-    <li><b>Write</b> — writes values from <code>msg.items</code> (each item must have a <code>value</code> property). Requires <code>datatype</code> on each item.</li>
+    <li>
+      <b>Read</b> — reads the values of nodes specified in <code>msg.items</code>. Sends per-item
+      results on output 1 and batch results on output 3.
+    </li>
+    <li>
+      <b>Write</b> — writes values from <code>msg.items</code> (each item must have a
+      <code>value</code> property). Requires <code>datatype</code> on each item.
+    </li>
   </ul>
 
   <h4>Subscriptions</h4>
   <ul>
-    <li><b>Subscribe</b> — monitors value changes for all items in <code>msg.items</code>. Single items use individual monitoring; multiple items use a group subscription.</li>
+    <li>
+      <b>Subscribe</b> — monitors value changes for all items in <code>msg.items</code>. Single
+      items use individual monitoring; multiple items use a group subscription.
+    </li>
     <li><b>Monitor</b> — like subscribe but with deadband filtering.</li>
     <li><b>Unsubscribe</b> — stops monitoring items in <code>msg.items</code>.</li>
     <li><b>Delete Subscription</b> — removes the entire subscription.</li>
   </ul>
 
   <h4>History</h4>
-  <p>Set <code>msg.aggregate</code> to <code>"raw"</code>, <code>"min"</code>, <code>"max"</code>, <code>"ave"</code>, or <code>"interpolative"</code>.
-  Use <code>msg.start</code> and <code>msg.end</code> for the time range.</p>
+  <p>
+    Set <code>msg.aggregate</code> to <code>"raw"</code>, <code>"min"</code>, <code>"max"</code>,
+    <code>"ave"</code>, or <code>"interpolative"</code>. Use <code>msg.start</code> and
+    <code>msg.end</code> for the time range.
+  </p>
 
   <h4>Methods</h4>
-  <p>Set <code>msg.objectId</code>, <code>msg.methodId</code>, and <code>msg.inputArguments</code> (array of <code>{dataType, value}</code>).</p>
+  <p>
+    Set <code>msg.objectId</code>, <code>msg.methodId</code>, and
+    <code>msg.inputArguments</code> (array of <code>{dataType, value}</code>).
+  </p>
 
   <h4>Events</h4>
   <p>Subscribes to OPC UA events. Set <code>msg.eventTypeIds</code> for the event type filter.</p>
 
   <h4>Connection</h4>
-  <p>Use <code>connect</code>, <code>disconnect</code>, or <code>reconnect</code> actions to dynamically control the connection.
-  Set <code>msg.OpcUaEndpoint</code> with new endpoint details for dynamic connect.</p>
+  <p>
+    Use <code>connect</code>, <code>disconnect</code>, or <code>reconnect</code> actions to
+    dynamically control the connection. Set <code>msg.OpcUaEndpoint</code> with new endpoint details
+    for dynamic connect.
+  </p>
 
-  <p><b>Connect on start</b>: When checked (default), the node connects to the server as soon as the flow
-  starts. When unchecked, the node remains idle until the first message arrives or an explicit
-  <code>connect</code> action is received. This is useful for subflows with dynamic endpoints.</p>
+  <p>
+    <b>Connect on start</b>: When checked (default), the node connects to the server as soon as the
+    flow starts. When unchecked, the node remains idle until the first message arrives or an
+    explicit <code>connect</code> action is received. This is useful for subflows with dynamic
+    endpoints.
+  </p>
 
   <h3>References</h3>
   <ul>

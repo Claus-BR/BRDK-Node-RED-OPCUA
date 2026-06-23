@@ -13,26 +13,26 @@
      1. NODE REGISTRATION
      ═══════════════════════════════════════════════════════════════════════ -->
 <script type="text/javascript">
-  RED.nodes.registerType("opcua-item", {
-    category: "BRDK OPCUA",
-    color: "#3FADB5",
+  RED.nodes.registerType('opcua-item', {
+    category: 'BRDK OPCUA',
+    color: '#3FADB5',
     defaults: {
-      item:     { value: "", required: true },
-      datatype: { value: "", required: true },
-      value:    { value: "" },
-      name:     { value: "" },
+      item: { value: '', required: true },
+      datatype: { value: '', required: true },
+      value: { value: '' },
+      name: { value: '' },
     },
     inputs: 1,
     outputs: 1,
-    icon: "font-awesome/fa-tag",
-    align: "right",
+    icon: 'font-awesome/fa-tag',
+    align: 'right',
     label: function () {
-      return this.name || this.item || "OPC UA Item";
+      return this.name || this.item || 'OPC UA Item';
     },
     labelStyle: function () {
-      return this.name ? "node_label_italic" : "";
+      return this.name ? 'node_label_italic' : '';
     },
-    paletteLabel: "opcua item",
+    paletteLabel: 'opcua item',
   });
 </script>
 
@@ -40,11 +40,14 @@
      2. EDIT TEMPLATE
      ═══════════════════════════════════════════════════════════════════════ -->
 <script type="text/html" data-template-name="opcua-item">
-
   <!-- Item address -->
   <div class="form-row">
     <label for="node-input-item"><i class="fa fa-address-card"></i> Item</label>
-    <input type="text" id="node-input-item" placeholder="ns=2;s=MyVariable  or  ns=2;i=1234  or  br=/objects/...">
+    <input
+      type="text"
+      id="node-input-item"
+      placeholder="ns=2;s=MyVariable  or  ns=2;i=1234  or  br=/objects/..."
+    />
   </div>
 
   <!-- Data type -->
@@ -99,15 +102,14 @@
   <!-- Static value (optional) -->
   <div class="form-row">
     <label for="node-input-value"><i class="fa fa-pencil"></i> Value</label>
-    <input type="text" id="node-input-value" placeholder="Leave empty for read-only use">
+    <input type="text" id="node-input-value" placeholder="Leave empty for read-only use" />
   </div>
 
   <!-- Display name -->
   <div class="form-row">
     <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
-    <input type="text" id="node-input-name" placeholder="Browse / display name">
+    <input type="text" id="node-input-name" placeholder="Browse / display name" />
   </div>
-
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
@@ -125,15 +127,19 @@
   <h3>Outputs</h3>
   <dl class="message-properties">
     <dt>items <span class="property-type">array</span></dt>
-    <dd>Array of one item: <code>[{ nodeId, datatype, browseName, value? }]</code>.
-    The <code>value</code> property is included only when a static value is configured.</dd>
+    <dd>
+      Array of one item: <code>[{ nodeId, datatype, browseName, value? }]</code>. The
+      <code>value</code> property is included only when a static value is configured.
+    </dd>
     <dt>topic <span class="property-type">string</span></dt>
     <dd>The OPC UA NodeId address (e.g. <code>ns=2;s=MyVariable</code>).</dd>
   </dl>
 
   <h3>Details</h3>
-  <p>Place this node before an <b>OPC UA Client</b> node to configure which
-  OPC UA variable to read, write, or subscribe to.</p>
+  <p>
+    Place this node before an <b>OPC UA Client</b> node to configure which OPC UA variable to read,
+    write, or subscribe to.
+  </p>
 
   <h4>Item address formats</h4>
   <ul>
@@ -144,11 +150,15 @@
 
   <h4>Value handling</h4>
   <ul>
-    <li>If <b>Value</b> is set, it is coerced to the correct OPC UA type and included
-    in the item's <code>value</code> property (for write operations).</li>
+    <li>
+      If <b>Value</b> is set, it is coerced to the correct OPC UA type and included in the item's
+      <code>value</code> property (for write operations).
+    </li>
     <li>Leave <b>Value</b> empty for read-only or subscribe operations.</li>
-    <li>For dynamic writes, set <code>msg.items[0].value</code> via a <b>Function</b> node
-    before the message reaches the Client.</li>
+    <li>
+      For dynamic writes, set <code>msg.items[0].value</code> via a <b>Function</b> node before the
+      message reaches the Client.
+    </li>
     <li>Array values can be provided as comma-separated strings: <code>1,2,3,4,5</code>.</li>
   </ul>
 </script>

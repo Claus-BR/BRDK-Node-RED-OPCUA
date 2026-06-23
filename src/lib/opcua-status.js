@@ -6,7 +6,7 @@
  * entire library, and a single source of truth for status values/colors.
  */
 
-"use strict";
+'use strict';
 
 // ── Status definitions ─────────────────────────────────────────────────────────
 //
@@ -23,73 +23,73 @@
 
 const STATUS_MAP = {
   // ── Initialization & connection ──────────────────────────────────────────
-  "client created":    { fill: "green",  shape: "ring", text: "creating client" },
-  "connected":          { fill: "green",  shape: "ring", text: "connected" },
-  "initialized":        { fill: "green",  shape: "ring", text: "initialized" },
-  "session active":     { fill: "green",  shape: "dot",  text: "session active" },
-  "re-established":     { fill: "green",  shape: "ring", text: "re-established" },
+  'client created': { fill: 'green', shape: 'ring', text: 'creating client' },
+  connected: { fill: 'green', shape: 'ring', text: 'connected' },
+  initialized: { fill: 'green', shape: 'ring', text: 'initialized' },
+  'session active': { fill: 'green', shape: 'dot', text: 'session active' },
+  're-established': { fill: 'green', shape: 'ring', text: 're-established' },
 
   // ── Transitional ────────────────────────────────────────────────────────
-  "connecting":         { fill: "yellow", shape: "dot",  text: "connecting" },
-  "reconnecting":       { fill: "yellow", shape: "dot",  text: "reconnecting" },
-  "extracting datatypes": { fill: "yellow", shape: "dot",  text: "extracting datatypes" },
+  connecting: { fill: 'yellow', shape: 'dot', text: 'connecting' },
+  reconnecting: { fill: 'yellow', shape: 'dot', text: 'reconnecting' },
+  'extracting datatypes': { fill: 'yellow', shape: 'dot', text: 'extracting datatypes' },
   // ── Active operations ────────────────────────────────────────────────────
-  "reading":            { fill: "green",  shape: "dot",  text: "reading" },
-  "read done":          { fill: "green",  shape: "dot",  text: "read done" },
-  "writing":            { fill: "green",  shape: "dot",  text: "writing" },
-  "subscribing":        { fill: "green",  shape: "dot",  text: "subscribing" },
-  "subscribed":         { fill: "green",  shape: "dot",  text: "subscribed" },
-  "monitoring":         { fill: "green",  shape: "dot",  text: "monitoring" },
-  "browsing":           { fill: "green",  shape: "dot",  text: "browsing" },
-  "browse done":        { fill: "green",  shape: "dot",  text: "browse done" },
-  "value written":      { fill: "green",  shape: "dot",  text: "value written" },
-  "calling method":     { fill: "green",  shape: "dot",  text: "calling method" },
-  "method executed":    { fill: "green",  shape: "dot",  text: "method executed" },
-  "acknowledging":      { fill: "green",  shape: "dot",  text: "acknowledging" },
+  reading: { fill: 'green', shape: 'dot', text: 'reading' },
+  'read done': { fill: 'green', shape: 'dot', text: 'read done' },
+  writing: { fill: 'green', shape: 'dot', text: 'writing' },
+  subscribing: { fill: 'green', shape: 'dot', text: 'subscribing' },
+  subscribed: { fill: 'green', shape: 'dot', text: 'subscribed' },
+  monitoring: { fill: 'green', shape: 'dot', text: 'monitoring' },
+  browsing: { fill: 'green', shape: 'dot', text: 'browsing' },
+  'browse done': { fill: 'green', shape: 'dot', text: 'browse done' },
+  'value written': { fill: 'green', shape: 'dot', text: 'value written' },
+  'calling method': { fill: 'green', shape: 'dot', text: 'calling method' },
+  'method executed': { fill: 'green', shape: 'dot', text: 'method executed' },
+  acknowledging: { fill: 'green', shape: 'dot', text: 'acknowledging' },
 
   // ── Errors ───────────────────────────────────────────────────────────────
-  "error":              { fill: "red",    shape: "ring", text: "error" },
-  "disconnected":       { fill: "red",    shape: "ring", text: "disconnected" },
-  "terminated":         { fill: "red",    shape: "ring", text: "terminated" },
-  "session closed":     { fill: "red",    shape: "ring", text: "session closed" },
-  "timed out":          { fill: "red",    shape: "ring", text: "timed out" },
-  "invalid endpoint":   { fill: "red",    shape: "ring", text: "invalid endpoint" },
-  "invalid certificate":{ fill: "red",    shape: "ring", text: "invalid certificate" },
-  "no session":         { fill: "red",    shape: "ring", text: "no session" },
-  "subscription error": { fill: "red",    shape: "ring", text: "subscription error" },
-  "command error":      { fill: "red",    shape: "ring", text: "command error" },
+  error: { fill: 'red', shape: 'ring', text: 'error' },
+  disconnected: { fill: 'red', shape: 'ring', text: 'disconnected' },
+  terminated: { fill: 'red', shape: 'ring', text: 'terminated' },
+  'session closed': { fill: 'red', shape: 'ring', text: 'session closed' },
+  'timed out': { fill: 'red', shape: 'ring', text: 'timed out' },
+  'invalid endpoint': { fill: 'red', shape: 'ring', text: 'invalid endpoint' },
+  'invalid certificate': { fill: 'red', shape: 'ring', text: 'invalid certificate' },
+  'no session': { fill: 'red', shape: 'ring', text: 'no session' },
+  'subscription error': { fill: 'red', shape: 'ring', text: 'subscription error' },
+  'command error': { fill: 'red', shape: 'ring', text: 'command error' },
 
   // ── Server lifecycle ─────────────────────────────────────────────────────
-  "running":            { fill: "green",  shape: "dot",  text: "running" },
-  "restarting":         { fill: "yellow", shape: "dot",  text: "restarting" },
-  "shutting down":      { fill: "yellow", shape: "dot",  text: "shutting down" },
-  "server stopped":     { fill: "red",    shape: "ring", text: "server stopped" },
+  running: { fill: 'green', shape: 'dot', text: 'running' },
+  restarting: { fill: 'yellow', shape: 'dot', text: 'restarting' },
+  'shutting down': { fill: 'yellow', shape: 'dot', text: 'shutting down' },
+  'server stopped': { fill: 'red', shape: 'ring', text: 'server stopped' },
 
   // ── Server commands ──────────────────────────────────────────────────────
-  "variable added":     { fill: "green",  shape: "dot",  text: "variable added" },
-  "folder added":       { fill: "green",  shape: "dot",  text: "folder added" },
-  "folder set":         { fill: "green",  shape: "dot",  text: "folder set" },
-  "node deleted":       { fill: "green",  shape: "dot",  text: "node deleted" },
-  "equipment added":    { fill: "green",  shape: "dot",  text: "equipment added" },
-  "asset added":        { fill: "green",  shape: "dot",  text: "asset added" },
-  "method added":       { fill: "green",  shape: "dot",  text: "method added" },
-  "method bound":       { fill: "green",  shape: "dot",  text: "method bound" },
-  "historian installed":{ fill: "green",  shape: "dot",  text: "historian installed" },
-  "alarm installed":    { fill: "green",  shape: "dot",  text: "alarm installed" },
-  "extension object added": { fill: "green", shape: "dot", text: "extension object added" },
-  "file added":         { fill: "green",  shape: "dot",  text: "file added" },
-  "namespace registered": { fill: "green", shape: "dot",  text: "namespace registered" },
-  "users updated":      { fill: "green",  shape: "dot",  text: "users updated" },
-  "address space saved": { fill: "green", shape: "dot",  text: "address space saved" },
-  "address space loaded": { fill: "green", shape: "dot", text: "address space loaded" },
-  "variables bound":    { fill: "green",  shape: "dot",  text: "variables bound" },
-  "updating variables": { fill: "green",  shape: "dot",  text: "updating variables" },
-  "client connected":   { fill: "green",  shape: "dot",  text: "client connected" },
-  "client disconnected":{ fill: "green",  shape: "ring", text: "client disconnected" },
-  "session activated":  { fill: "green",  shape: "dot",  text: "session activated" },
+  'variable added': { fill: 'green', shape: 'dot', text: 'variable added' },
+  'folder added': { fill: 'green', shape: 'dot', text: 'folder added' },
+  'folder set': { fill: 'green', shape: 'dot', text: 'folder set' },
+  'node deleted': { fill: 'green', shape: 'dot', text: 'node deleted' },
+  'equipment added': { fill: 'green', shape: 'dot', text: 'equipment added' },
+  'asset added': { fill: 'green', shape: 'dot', text: 'asset added' },
+  'method added': { fill: 'green', shape: 'dot', text: 'method added' },
+  'method bound': { fill: 'green', shape: 'dot', text: 'method bound' },
+  'historian installed': { fill: 'green', shape: 'dot', text: 'historian installed' },
+  'alarm installed': { fill: 'green', shape: 'dot', text: 'alarm installed' },
+  'extension object added': { fill: 'green', shape: 'dot', text: 'extension object added' },
+  'file added': { fill: 'green', shape: 'dot', text: 'file added' },
+  'namespace registered': { fill: 'green', shape: 'dot', text: 'namespace registered' },
+  'users updated': { fill: 'green', shape: 'dot', text: 'users updated' },
+  'address space saved': { fill: 'green', shape: 'dot', text: 'address space saved' },
+  'address space loaded': { fill: 'green', shape: 'dot', text: 'address space loaded' },
+  'variables bound': { fill: 'green', shape: 'dot', text: 'variables bound' },
+  'updating variables': { fill: 'green', shape: 'dot', text: 'updating variables' },
+  'client connected': { fill: 'green', shape: 'dot', text: 'client connected' },
+  'client disconnected': { fill: 'green', shape: 'ring', text: 'client disconnected' },
+  'session activated': { fill: 'green', shape: 'dot', text: 'session activated' },
 
   // ── Idle / default ───────────────────────────────────────────────────────
-  "waiting":            { fill: "blue",   shape: "ring", text: "waiting" },
+  waiting: { fill: 'blue', shape: 'ring', text: 'waiting' },
 };
 
 /**
@@ -99,7 +99,7 @@ const STATUS_MAP = {
  * @returns {{ fill: string, shape: string, text: string }}
  */
 function getStatus(statusKey) {
-  return STATUS_MAP[statusKey] || { fill: "blue", shape: "ring", text: statusKey || "waiting" };
+  return STATUS_MAP[statusKey] || { fill: 'blue', shape: 'ring', text: statusKey || 'waiting' };
 }
 
 /**
