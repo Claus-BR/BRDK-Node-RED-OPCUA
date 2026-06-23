@@ -9,76 +9,92 @@
      1. NODE REGISTRATION
      ═══════════════════════════════════════════════════════════════════════ -->
 <script type="text/javascript">
-  RED.nodes.registerType("opcua-action", {
-    category: "BRDK OPCUA",
-    color: "#3FADB5",
+  RED.nodes.registerType('opcua-action', {
+    category: 'BRDK OPCUA',
+    color: '#3FADB5',
     defaults: {
-      action:              { value: "read", required: true },
-      name:                { value: "" },
+      action: { value: 'read', required: true },
+      name: { value: '' },
       // Subscription config node (optional for non-subscription actions)
-      subscription:        { value: "", type: "opcua-subscription", validate: function (v) {
-        var action = this.action;
-        if (!["subscribe", "events", "monitor", "unsubscribe", "deletesubscription"].includes(action)) return true;
-        return !!v;
-      }},
+      subscription: {
+        value: '',
+        type: 'opcua-subscription',
+        validate: function (v) {
+          var action = this.action;
+          if (
+            !['subscribe', 'events', 'monitor', 'unsubscribe', 'deletesubscription'].includes(
+              action
+            )
+          )
+            return true;
+          return !!v;
+        },
+      },
       // Monitor only
-      deadbandtype:        { value: "a" },
-      deadbandvalue:       { value: 1 },
+      deadbandtype: { value: 'a' },
+      deadbandvalue: { value: 1 },
       // Events only
-      customEventFields:   { value: "" },
+      customEventFields: { value: '' },
       // Events
-      eventTypeSelect:     { value: "i=2041" },
-      eventTypeIds:        { value: "" },
+      eventTypeSelect: { value: 'i=2041' },
+      eventTypeIds: { value: '' },
       // Browse
-      collect:             { value: false },
-      maxDepth:            { value: 1 },
+      collect: { value: false },
+      maxDepth: { value: 1 },
       // History
-      aggregate:           { value: "raw" },
-      numValuesPerNode:    { value: 1000 },
-      processingInterval:  { value: 3600000 },
-      returnBounds:        { value: false },
-      historyRange:        { value: 1 },
-      historyRangeUnit:    { value: "h" },
+      aggregate: { value: 'raw' },
+      numValuesPerNode: { value: 1000 },
+      processingInterval: { value: 3600000 },
+      returnBounds: { value: false },
+      historyRange: { value: 1 },
+      historyRangeUnit: { value: 'h' },
       // Acknowledge
-      comment:             { value: "Acknowledged from Node-RED" },
+      comment: { value: 'Acknowledged from Node-RED' },
       // Method (objectId/methodId/args now configured on Smart Item node)
-      objectId:            { value: "" },
-      methodId:            { value: "" },
+      objectId: { value: '' },
+      methodId: { value: '' },
       // Connect / Reconnect
-      endpointUrl:         { value: "" },
+      endpointUrl: { value: '' },
     },
     inputs: 1,
     outputs: 1,
-    icon: "font-awesome/fa-bolt",
+    icon: 'font-awesome/fa-bolt',
     label: function () {
-      return this.name || this.action || "opcua action";
+      return this.name || this.action || 'opcua action';
     },
     labelStyle: function () {
-      return this.name ? "node_label_italic" : "";
+      return this.name ? 'node_label_italic' : '';
     },
-    paletteLabel: "opcua action",
+    paletteLabel: 'opcua action',
 
     oneditprepare: function () {
       // Ensure defaults for properties added after node creation
       var defaults = {
-        deadbandtype: "a", deadbandvalue: 1,
-        customEventFields: "", eventTypeIds: "",
-        collect: false, maxDepth: 1,
-        aggregate: "raw", numValuesPerNode: 1000,
-        processingInterval: 3600000, returnBounds: false,
-        historyRange: 1, historyRangeUnit: "h",
-        comment: "Acknowledged from Node-RED",
-        objectId: "", methodId: "",
-        endpointUrl: "",
+        deadbandtype: 'a',
+        deadbandvalue: 1,
+        customEventFields: '',
+        eventTypeIds: '',
+        collect: false,
+        maxDepth: 1,
+        aggregate: 'raw',
+        numValuesPerNode: 1000,
+        processingInterval: 3600000,
+        returnBounds: false,
+        historyRange: 1,
+        historyRangeUnit: 'h',
+        comment: 'Acknowledged from Node-RED',
+        objectId: '',
+        methodId: '',
+        endpointUrl: '',
       };
       var self = this;
       Object.keys(defaults).forEach(function (key) {
-        var inputId = "#node-input-" + key;
+        var inputId = '#node-input-' + key;
         var $el = $(inputId);
-        if ($el.length && ($el.val() === "" || $el.val() === null || $el.val() === undefined)) {
+        if ($el.length && ($el.val() === '' || $el.val() === null || $el.val() === undefined)) {
           var val = self[key] !== undefined ? self[key] : defaults[key];
-          if ($el.is(":checkbox")) {
-            $el.prop("checked", !!val);
+          if ($el.is(':checkbox')) {
+            $el.prop('checked', !!val);
           } else {
             $el.val(val);
           }
@@ -86,58 +102,64 @@
       });
 
       function updateVisibility() {
-        var action = $("#node-input-action").val();
+        var action = $('#node-input-action').val();
 
-        var isSubRelated = ["subscribe", "events", "monitor", "unsubscribe", "deletesubscription"].includes(action);
-        var isMonitor  = action === "monitor";
-        var isEvents   = action === "events";
-        var isBrowse   = action === "browse";
-        var isHistory  = action === "history";
-        var isAck      = action === "acknowledge";
-        var isMethod   = action === "method";
-        var isConnect  = ["connect", "reconnect"].includes(action);
+        var isSubRelated = [
+          'subscribe',
+          'events',
+          'monitor',
+          'unsubscribe',
+          'deletesubscription',
+        ].includes(action);
+        var isMonitor = action === 'monitor';
+        var isEvents = action === 'events';
+        var isBrowse = action === 'browse';
+        var isHistory = action === 'history';
+        var isAck = action === 'acknowledge';
+        var isMethod = action === 'method';
+        var isConnect = ['connect', 'reconnect'].includes(action);
 
-        $(".action-subscription-row").toggle(isSubRelated);
-        $(".action-deadband-row").toggle(isMonitor);
-        $(".action-eventfields-row").toggle(isEvents);
-        $(".action-eventtypes-row").toggle(isEvents);
+        $('.action-subscription-row').toggle(isSubRelated);
+        $('.action-deadband-row').toggle(isMonitor);
+        $('.action-eventfields-row').toggle(isEvents);
+        $('.action-eventtypes-row').toggle(isEvents);
         if (isEvents) {
           updateEventTypeCustom();
         } else {
-          $(".action-eventtypes-custom-row").toggle(false);
+          $('.action-eventtypes-custom-row').toggle(false);
         }
-        $(".action-browse-row").toggle(isBrowse);
-        $(".action-history-row").toggle(isHistory);
-        $(".action-history-aggregate-row").toggle(isHistory);
-        $(".action-history-range-row").toggle(isHistory);
-        $(".action-acknowledge-row").toggle(isAck);
-        $(".action-method-row").toggle(isMethod);
-        $(".action-connect-row").toggle(isConnect);
+        $('.action-browse-row').toggle(isBrowse);
+        $('.action-history-row').toggle(isHistory);
+        $('.action-history-aggregate-row').toggle(isHistory);
+        $('.action-history-range-row').toggle(isHistory);
+        $('.action-acknowledge-row').toggle(isAck);
+        $('.action-method-row').toggle(isMethod);
+        $('.action-connect-row').toggle(isConnect);
 
         // Show processingInterval only for non-raw aggregates
         if (isHistory) {
-          var agg = $("#node-input-aggregate").val();
-          $(".action-history-processing-row").toggle(agg !== "raw");
+          var agg = $('#node-input-aggregate').val();
+          $('.action-history-processing-row').toggle(agg !== 'raw');
         } else {
-          $(".action-history-processing-row").toggle(false);
+          $('.action-history-processing-row').toggle(false);
         }
       }
 
       // ── Method arguments: dynamic editable list ─────────────────
       // ── Event type dropdown: toggle custom text field ──────────────
       function updateEventTypeCustom() {
-        var sel = $("#node-input-eventTypeSelect").val();
-        $(".action-eventtypes-custom-row").toggle(sel === "custom");
+        var sel = $('#node-input-eventTypeSelect').val();
+        $('.action-eventtypes-custom-row').toggle(sel === 'custom');
       }
-      $("#node-input-eventTypeSelect").on("change", updateEventTypeCustom);
+      $('#node-input-eventTypeSelect').on('change', updateEventTypeCustom);
 
       // Restore "Custom" selection if eventTypeIds has a non-standard value
-      var storedSelect = this.eventTypeSelect || "i=2041";
-      $("#node-input-eventTypeSelect").val(storedSelect);
+      var storedSelect = this.eventTypeSelect || 'i=2041';
+      $('#node-input-eventTypeSelect').val(storedSelect);
       updateEventTypeCustom();
 
-      $("#node-input-action").on("change", updateVisibility);
-      $("#node-input-aggregate").on("change", updateVisibility);
+      $('#node-input-action').on('change', updateVisibility);
+      $('#node-input-aggregate').on('change', updateVisibility);
       updateVisibility();
     },
   });
@@ -147,7 +169,6 @@
      2. EDIT TEMPLATE
      ═══════════════════════════════════════════════════════════════════════ -->
 <script type="text/html" data-template-name="opcua-action">
-
   <!-- Action -->
   <div class="form-row">
     <label for="node-input-action"><i class="fa fa-bolt"></i> Action</label>
@@ -196,7 +217,7 @@
   <!-- ── Subscribe / Monitor / Events: Subscription Config ──────────── -->
   <div class="form-row action-subscription-row" style="display: none;">
     <label for="node-input-subscription"><i class="fa fa-rss"></i> Subscription</label>
-    <input type="text" id="node-input-subscription">
+    <input type="text" id="node-input-subscription" />
   </div>
 
   <!-- ── Monitor: Deadband ───────────────────────────────────────────── -->
@@ -206,13 +227,20 @@
       <option value="a">Absolute</option>
       <option value="p">Percent</option>
     </select>
-    <input type="number" id="node-input-deadbandvalue" style="width: 80px;" step="0.1" min="0" placeholder="1">
+    <input
+      type="number"
+      id="node-input-deadbandvalue"
+      style="width: 80px;"
+      step="0.1"
+      min="0"
+      placeholder="1"
+    />
   </div>
 
   <!-- ── Events: Custom Fields ───────────────────────────────────────── -->
   <div class="form-row action-eventfields-row" style="display: none;">
     <label for="node-input-customEventFields"><i class="fa fa-tags"></i> Custom Fields</label>
-    <input type="text" id="node-input-customEventFields" placeholder="Field1, Field2, ...">
+    <input type="text" id="node-input-customEventFields" placeholder="Field1, Field2, ..." />
   </div>
 
   <!-- ── Events: Event Type Select ───────────────────────────────────── -->
@@ -232,19 +260,23 @@
   <!-- ── Events: Custom Event Type IDs (shown when "Custom" is selected) ── -->
   <div class="form-row action-eventtypes-custom-row" style="display: none;">
     <label for="node-input-eventTypeIds"><i class="fa fa-filter"></i> Event Type IDs</label>
-    <input type="text" id="node-input-eventTypeIds" placeholder="i=2041, ns=2;i=5001 (comma-separated)">
+    <input
+      type="text"
+      id="node-input-eventTypeIds"
+      placeholder="i=2041, ns=2;i=5001 (comma-separated)"
+    />
   </div>
 
   <!-- ── Browse: Collect Mode ────────────────────────────────────────── -->
   <div class="form-row action-browse-row" style="display: none;">
     <label for="node-input-collect"><i class="fa fa-sitemap"></i> Collect</label>
-    <input type="checkbox" id="node-input-collect" style="width: auto; margin-left: 5px;">
+    <input type="checkbox" id="node-input-collect" style="width: auto; margin-left: 5px;" />
     <span style="margin-left: 5px;">Collect all references into a single message</span>
   </div>
   <!-- ── Browse: Max Depth ────────────────────────────────────────── -->
   <div class="form-row action-browse-row" style="display: none;">
     <label for="node-input-maxDepth"><i class="fa fa-level-down"></i> Max Depth</label>
-    <input type="number" id="node-input-maxDepth" style="width: 80px;" min="1" placeholder="1">
+    <input type="number" id="node-input-maxDepth" style="width: 80px;" min="1" placeholder="1" />
     <span style="margin-left: 5px;">levels deep (1 = direct children only)</span>
   </div>
   <!-- ── History: Aggregate ──────────────────────────────────────────── -->
@@ -261,15 +293,29 @@
 
   <!-- ── History: Settings ───────────────────────────────────────────── -->
   <div class="form-row action-history-row" style="display: none;">
-    <label for="node-input-numValuesPerNode"><i class="fa fa-sort-numeric-asc"></i> Max Values</label>
-    <input type="number" id="node-input-numValuesPerNode" style="width: 100px;" min="1" placeholder="1000">
+    <label for="node-input-numValuesPerNode"
+      ><i class="fa fa-sort-numeric-asc"></i> Max Values</label
+    >
+    <input
+      type="number"
+      id="node-input-numValuesPerNode"
+      style="width: 100px;"
+      min="1"
+      placeholder="1000"
+    />
   </div>
 
   <!-- ── History: Time Range ─────────────────────────────────────────── -->
   <div class="form-row action-history-range-row" style="display: none;">
     <label for="node-input-historyRange"><i class="fa fa-calendar"></i> Time Range</label>
     <span style="margin-right: 5px;">Last</span>
-    <input type="number" id="node-input-historyRange" style="width: 80px;" min="1" placeholder="1">
+    <input
+      type="number"
+      id="node-input-historyRange"
+      style="width: 80px;"
+      min="1"
+      placeholder="1"
+    />
     <select id="node-input-historyRangeUnit" style="width: 100px;">
       <option value="ms">milliseconds</option>
       <option value="s">seconds</option>
@@ -279,44 +325,57 @@
   </div>
 
   <div class="form-row action-history-processing-row" style="display: none;">
-    <label for="node-input-processingInterval"><i class="fa fa-hourglass"></i> Processing Int.</label>
-    <input type="number" id="node-input-processingInterval" style="width: 120px;" min="0" placeholder="3600000">
+    <label for="node-input-processingInterval"
+      ><i class="fa fa-hourglass"></i> Processing Int.</label
+    >
+    <input
+      type="number"
+      id="node-input-processingInterval"
+      style="width: 120px;"
+      min="0"
+      placeholder="3600000"
+    />
     <span style="margin-left: 5px;">ms</span>
   </div>
 
   <div class="form-row action-history-row" style="display: none;">
     <label for="node-input-returnBounds"><i class="fa fa-arrows-v"></i> Return Bounds</label>
-    <input type="checkbox" id="node-input-returnBounds" style="width: auto; margin-left: 5px;">
+    <input type="checkbox" id="node-input-returnBounds" style="width: auto; margin-left: 5px;" />
     <span style="margin-left: 5px;">Include bounding values</span>
   </div>
 
   <!-- ── Acknowledge: Comment ────────────────────────────────────────── -->
   <div class="form-row action-acknowledge-row" style="display: none;">
     <label for="node-input-comment"><i class="fa fa-comment"></i> Comment</label>
-    <input type="text" id="node-input-comment" placeholder="Acknowledged from Node-RED">
+    <input type="text" id="node-input-comment" placeholder="Acknowledged from Node-RED" />
   </div>
 
   <!-- ── Method: note ──────────────────────────────────────────────────── -->
   <div class="form-row action-method-row" style="display: none;">
-    <div style="padding: 8px; background: var(--red-ui-secondary-background-color, #f7f7f7); border: 1px solid var(--red-ui-form-input-border-color, #ccc); border-radius: 4px; font-size: 12px; color: var(--red-ui-text-color-info, #666);">
+    <div
+      style="padding: 8px; background: var(--red-ui-secondary-background-color, #f7f7f7); border: 1px solid var(--red-ui-form-input-border-color, #ccc); border-radius: 4px; font-size: 12px; color: var(--red-ui-text-color-info, #666);"
+    >
       <i class="fa fa-info-circle"></i>
-      Configure the method (objectId, methodId, input arguments) on the <b>Smart Item</b> node.
-      The Smart Item's tree browser auto-detects methods and fetches their argument definitions.
+      Configure the method (objectId, methodId, input arguments) on the <b>Smart Item</b> node. The
+      Smart Item's tree browser auto-detects methods and fetches their argument definitions.
     </div>
   </div>
 
   <!-- ── Connect / Reconnect: Endpoint URL ─────────────────────────── -->
   <div class="form-row action-connect-row" style="display: none;">
     <label for="node-input-endpointUrl"><i class="fa fa-globe"></i> Endpoint URL</label>
-    <input type="text" id="node-input-endpointUrl" placeholder="opc.tcp://localhost:4840 (optional override)">
+    <input
+      type="text"
+      id="node-input-endpointUrl"
+      placeholder="opc.tcp://localhost:4840 (optional override)"
+    />
   </div>
 
   <!-- Node name -->
   <div class="form-row">
     <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
-    <input type="text" id="node-input-name" placeholder="Name">
+    <input type="text" id="node-input-name" placeholder="Name" />
   </div>
-
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════

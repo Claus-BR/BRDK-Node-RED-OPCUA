@@ -17,9 +17,9 @@
  *   msg.permissions        — array of { roleId, permissions } objects
  */
 
-"use strict";
+'use strict';
 
-const opcua = require("node-opcua");
+const opcua = require('node-opcua');
 
 // ── Role key → WellKnownRoles mapping ────────────────────────────────────────
 const ROLE_MAP = {
@@ -35,53 +35,52 @@ const ROLE_MAP = {
 
 // ── Access level flag definitions ────────────────────────────────────────────
 const ACCESS_LEVEL_FLAGS = [
-  { key: "accessLevelCurrentRead",    flag: "CurrentRead" },
-  { key: "accessLevelCurrentWrite",   flag: "CurrentWrite" },
-  { key: "accessLevelStatusWrite",    flag: "StatusWrite" },
-  { key: "accessLevelHistoryRead",    flag: "HistoryRead" },
-  { key: "accessLevelHistoryWrite",   flag: "HistoryWrite" },
-  { key: "accessLevelSemanticChange", flag: "SemanticChange" },
+  { key: 'accessLevelCurrentRead', flag: 'CurrentRead' },
+  { key: 'accessLevelCurrentWrite', flag: 'CurrentWrite' },
+  { key: 'accessLevelStatusWrite', flag: 'StatusWrite' },
+  { key: 'accessLevelHistoryRead', flag: 'HistoryRead' },
+  { key: 'accessLevelHistoryWrite', flag: 'HistoryWrite' },
+  { key: 'accessLevelSemanticChange', flag: 'SemanticChange' },
 ];
 
 // ── Permission flag definitions ──────────────────────────────────────────────
 const PERMISSION_FLAGS = [
-  { key: "permissionBrowse",          flag: "Browse" },
-  { key: "permissionRead",            flag: "Read" },
-  { key: "permissionWrite",           flag: "Write" },
-  { key: "permissionWriteAttribute",  flag: "WriteAttribute" },
-  { key: "permissionReadRole",        flag: "ReadRolePermissions" },
-  { key: "permissionWriteRole",       flag: "WriteRolePermissions" },
-  { key: "permissionReadHistory",     flag: "ReadHistory" },
-  { key: "permissionWriteHistory",    flag: "WriteHistorizing" },
-  { key: "permissionInsertHistory",   flag: "InsertHistory" },
-  { key: "permissionModifyHistory",   flag: "ModifyHistory" },
-  { key: "permissionDeleteHistory",   flag: "DeleteHistory" },
-  { key: "permissionReceiveEvents",   flag: "ReceiveEvents" },
-  { key: "permissionCall",            flag: "Call" },
-  { key: "permissionAddReference",    flag: "AddReference" },
-  { key: "permissionRemoveReference", flag: "RemoveReference" },
-  { key: "permissionDeleteNode",      flag: "DeleteNode" },
-  { key: "permissionAddNode",         flag: "AddNode" },
+  { key: 'permissionBrowse', flag: 'Browse' },
+  { key: 'permissionRead', flag: 'Read' },
+  { key: 'permissionWrite', flag: 'Write' },
+  { key: 'permissionWriteAttribute', flag: 'WriteAttribute' },
+  { key: 'permissionReadRole', flag: 'ReadRolePermissions' },
+  { key: 'permissionWriteRole', flag: 'WriteRolePermissions' },
+  { key: 'permissionReadHistory', flag: 'ReadHistory' },
+  { key: 'permissionWriteHistory', flag: 'WriteHistorizing' },
+  { key: 'permissionInsertHistory', flag: 'InsertHistory' },
+  { key: 'permissionModifyHistory', flag: 'ModifyHistory' },
+  { key: 'permissionDeleteHistory', flag: 'DeleteHistory' },
+  { key: 'permissionReceiveEvents', flag: 'ReceiveEvents' },
+  { key: 'permissionCall', flag: 'Call' },
+  { key: 'permissionAddReference', flag: 'AddReference' },
+  { key: 'permissionRemoveReference', flag: 'RemoveReference' },
+  { key: 'permissionDeleteNode', flag: 'DeleteNode' },
+  { key: 'permissionAddNode', flag: 'AddNode' },
 ];
 
 module.exports = function (RED) {
-
   function OpcUaRightsNode(config) {
     RED.nodes.createNode(this, config);
 
     const node = this;
-    this.name = config.name || "";
+    this.name = config.name || '';
 
     // ── Pre-compute flags from static configuration ──────────────────────
     const accessLevelString = buildFlagString(config, ACCESS_LEVEL_FLAGS);
-    const permissionString  = buildFlagString(config, PERMISSION_FLAGS);
-    const roleId            = ROLE_MAP[config.role] || ROLE_MAP.a;
+    const permissionString = buildFlagString(config, PERMISSION_FLAGS);
+    const roleId = ROLE_MAP[config.role] || ROLE_MAP.a;
 
-    const accessLevel      = opcua.makeAccessLevelFlag(accessLevelString || "CurrentRead");
-    const permissionFlag   = opcua.makePermissionFlag(permissionString || "Browse");
+    const accessLevel = opcua.makeAccessLevelFlag(accessLevelString || 'CurrentRead');
+    const permissionFlag = opcua.makePermissionFlag(permissionString || 'Browse');
 
     // ── Input handler ────────────────────────────────────────────────────
-    node.on("input", (msg, send, done) => {
+    node.on('input', (msg, send, done) => {
       msg.accessLevel = accessLevel;
       msg.userAccessLevel = accessLevel; // Same flags for user access level
       msg.accessRestrictions = opcua.AccessRestrictionsFlag.None;
@@ -99,7 +98,7 @@ module.exports = function (RED) {
     });
   }
 
-  RED.nodes.registerType("opcua-rights", OpcUaRightsNode);
+  RED.nodes.registerType('opcua-rights', OpcUaRightsNode);
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
@@ -111,8 +110,6 @@ module.exports = function (RED) {
  * @returns {string} e.g. "CurrentRead | CurrentWrite | HistoryRead"
  */
 function buildFlagString(config, definitions) {
-  const flags = definitions
-    .filter(({ key }) => config[key] === true)
-    .map(({ flag }) => flag);
-  return flags.join(" | ");
+  const flags = definitions.filter(({ key }) => config[key] === true).map(({ flag }) => flag);
+  return flags.join(' | ');
 }

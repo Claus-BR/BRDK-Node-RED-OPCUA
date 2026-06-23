@@ -11,9 +11,9 @@
  * For dynamic writes, set `msg.items[0].value` via a Function node upstream.
  */
 
-"use strict";
+'use strict';
 
-const { coerceScalarValue, isArrayType, coerceArrayValue } = require("../lib/opcua-data-converter");
+const { coerceScalarValue, isArrayType, coerceArrayValue } = require('../lib/opcua-data-converter');
 
 module.exports = function (RED) {
   /**
@@ -25,26 +25,26 @@ module.exports = function (RED) {
     RED.nodes.createNode(this, config);
 
     // ── Configuration ────────────────────────────────────────────────────
-    this.item     = config.item     || "";   // NodeId address
-    this.datatype = (config.datatype || "").trim();
-    this.value    = config.value;            // Static default value (may be null)
-    this.name     = config.name     || "";   // Browse / display name
+    this.item = config.item || ''; // NodeId address
+    this.datatype = (config.datatype || '').trim();
+    this.value = config.value; // Static default value (may be null)
+    this.name = config.name || ''; // Browse / display name
 
     const node = this;
 
     // ── Input handler ────────────────────────────────────────────────────
-    this.on("input", (msg, send, done) => {
-      const effectiveType = node.datatype || msg.datatype || "";
+    this.on('input', (msg, send, done) => {
+      const effectiveType = node.datatype || msg.datatype || '';
 
       // Build the item object
       const item = {
-        nodeId:     node.item,
-        datatype:   effectiveType,
+        nodeId: node.item,
+        datatype: effectiveType,
         browseName: node.name,
       };
 
       // Include static value if configured (for write operations)
-      const hasStaticValue = node.value !== undefined && node.value !== null && node.value !== "";
+      const hasStaticValue = node.value !== undefined && node.value !== null && node.value !== '';
       if (hasStaticValue) {
         item.value = coerceValue(effectiveType, node.value);
       }
@@ -58,7 +58,7 @@ module.exports = function (RED) {
     });
   }
 
-  RED.nodes.registerType("opcua-item", OpcUaItemNode);
+  RED.nodes.registerType('opcua-item', OpcUaItemNode);
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────

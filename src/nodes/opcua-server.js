@@ -29,89 +29,88 @@
  *   Variable-write notifications include: msg.items [{ nodeId, datatype, browseName, value }]
  */
 
-"use strict";
+'use strict';
 
-const opcua = require("node-opcua");
-const { ObjectIds } = require("node-opcua-constants");
-const { installFileType } = require("node-opcua-file-transfer");
-const { NodeCrawler } = require("node-opcua-client-crawler");
-const path = require("path");
-const os = require("os");
-const fs = require("fs");
+const opcua = require('node-opcua');
+const { installFileType } = require('node-opcua-file-transfer');
+const { NodeCrawler } = require('node-opcua-client-crawler');
+const path = require('path');
+const os = require('os');
+const fs = require('fs');
 
-const { getStatus, getStatusWithDetail } = require("../lib/opcua-status");
-const converter = require("../lib/opcua-data-converter");
+const { getStatus, getStatusWithDetail } = require('../lib/opcua-status');
+const converter = require('../lib/opcua-data-converter');
 
 // Server certificate manager (separate from client PKI)
-const envPaths = require("env-paths")("node-red-opcua", { suffix: "" });
+const envPaths = require('env-paths')('node-red-opcua', { suffix: '' });
 
 module.exports = function (RED) {
-
   function OpcUaServerNode(config) {
     RED.nodes.createNode(this, config);
 
     const node = this;
 
     // ── Configuration from editor ──────────────────────────────────────
-    this.port           = Number(process.env.SERVER_PORT || config.port) || 4840;
-    this.name           = config.name || "";
-    this.resourcePath   = config.endpoint || "";
-    this.hostname       = config.hostname || "";
-    this.usersFile      = config.users || "";
-    this.nodesetDir     = config.nodesetDir || "";
+    this.port = Number(process.env.SERVER_PORT || config.port) || 4840;
+    this.name = config.name || '';
+    this.resourcePath = config.endpoint || '';
+    this.hostname = config.hostname || '';
+    this.usersFile = config.users || '';
+    this.nodesetDir = config.nodesetDir || '';
 
     // Security options
     this.autoAcceptUnknownCertificate = config.autoAcceptUnknownCertificate !== false;
-    this.registerToDiscovery          = config.registerToDiscovery === true;
+    this.registerToDiscovery = config.registerToDiscovery === true;
     this.constructDefaultAddressSpace = config.constructDefaultAddressSpace !== false;
-    this.allowAnonymous               = config.allowAnonymous !== false;
-    this.startOnDeploy                 = config.startOnDeploy !== false;
-    this.sessionTimeout               = Number(config.sessionTimeout) || 30000;
+    this.allowAnonymous = config.allowAnonymous !== false;
+    this.startOnDeploy = config.startOnDeploy !== false;
+    this.sessionTimeout = Number(config.sessionTimeout) || 30000;
 
     // Security modes
-    this.endpointNone          = config.endpointNone !== false;
-    this.endpointSign          = config.endpointSign !== false;
-    this.endpointSignEncrypt   = config.endpointSignEncrypt !== false;
+    this.endpointNone = config.endpointNone !== false;
+    this.endpointSign = config.endpointSign !== false;
+    this.endpointSignEncrypt = config.endpointSignEncrypt !== false;
 
     // Security policies
-    this.endpointBasic128Rsa15        = config.endpointBasic128Rsa15 !== false;
-    this.endpointBasic256             = config.endpointBasic256 !== false;
-    this.endpointBasic256Sha256       = config.endpointBasic256Sha256 !== false;
-    this.endpointAes128Sha256RsaOaep  = config.endpointAes128Sha256RsaOaep === true;
-    this.endpointAes256Sha256RsaPss   = config.endpointAes256Sha256RsaPss === true;
+    this.endpointBasic128Rsa15 = config.endpointBasic128Rsa15 !== false;
+    this.endpointBasic256 = config.endpointBasic256 !== false;
+    this.endpointBasic256Sha256 = config.endpointBasic256Sha256 !== false;
+    this.endpointAes128Sha256RsaOaep = config.endpointAes128Sha256RsaOaep === true;
+    this.endpointAes256Sha256RsaPss = config.endpointAes256Sha256RsaPss === true;
 
     // Operating limits
-    this.maxNodesPerBrowse                          = Number(config.maxNodesPerBrowse) || 0;
-    this.maxNodesPerHistoryReadData                  = Number(config.maxNodesPerHistoryReadData) || 0;
-    this.maxNodesPerHistoryReadEvents                = Number(config.maxNodesPerHistoryReadEvents) || 0;
-    this.maxNodesPerHistoryUpdateData                = Number(config.maxNodesPerHistoryUpdateData) || 0;
-    this.maxNodesPerRead                             = Number(config.maxNodesPerRead) || 0;
-    this.maxNodesPerWrite                            = Number(config.maxNodesPerWrite) || 0;
-    this.maxNodesPerMethodCall                       = Number(config.maxNodesPerMethodCall) || 0;
-    this.maxNodesPerRegisterNodes                    = Number(config.maxNodesPerRegisterNodes) || 0;
-    this.maxNodesPerNodeManagement                   = Number(config.maxNodesPerNodeManagement) || 0;
-    this.maxMonitoredItemsPerCall                    = Number(config.maxMonitoredItemsPerCall) || 0;
-    this.maxNodesPerHistoryUpdateEvents              = Number(config.maxNodesPerHistoryUpdateEvents) || 0;
-    this.maxNodesPerTranslateBrowsePathsToNodeIds    = Number(config.maxNodesPerTranslateBrowsePathsToNodeIds) || 0;
+    this.maxNodesPerBrowse = Number(config.maxNodesPerBrowse) || 0;
+    this.maxNodesPerHistoryReadData = Number(config.maxNodesPerHistoryReadData) || 0;
+    this.maxNodesPerHistoryReadEvents = Number(config.maxNodesPerHistoryReadEvents) || 0;
+    this.maxNodesPerHistoryUpdateData = Number(config.maxNodesPerHistoryUpdateData) || 0;
+    this.maxNodesPerRead = Number(config.maxNodesPerRead) || 0;
+    this.maxNodesPerWrite = Number(config.maxNodesPerWrite) || 0;
+    this.maxNodesPerMethodCall = Number(config.maxNodesPerMethodCall) || 0;
+    this.maxNodesPerRegisterNodes = Number(config.maxNodesPerRegisterNodes) || 0;
+    this.maxNodesPerNodeManagement = Number(config.maxNodesPerNodeManagement) || 0;
+    this.maxMonitoredItemsPerCall = Number(config.maxMonitoredItemsPerCall) || 0;
+    this.maxNodesPerHistoryUpdateEvents = Number(config.maxNodesPerHistoryUpdateEvents) || 0;
+    this.maxNodesPerTranslateBrowsePathsToNodeIds =
+      Number(config.maxNodesPerTranslateBrowsePathsToNodeIds) || 0;
 
     // Transport settings
     this.maxConnectionsPerEndpoint = Number(config.maxConnectionsPerEndpoint) || 20;
-    this.maxMessageSize            = Number(config.maxMessageSize) || 4096;
-    this.maxBufferSize             = Number(config.maxBufferSize) || 4096;
-    this.maxSessions               = Math.max(Number(config.maxSessions) || 20, 10);
+    this.maxMessageSize = Number(config.maxMessageSize) || 4096;
+    this.maxBufferSize = Number(config.maxBufferSize) || 4096;
+    this.maxSessions = Math.max(Number(config.maxSessions) || 20, 10);
     this.maxSubscriptionsPerSession = Number(config.maxSubscriptionsPerSession) || 50;
 
     // ── Internal state ─────────────────────────────────────────────────
-    this.server        = null;
-    this.vendorName    = null;
+    this.server = null;
+    this.vendorName = null;
     this.currentFolder = null;
-    this.variables     = {};       // "ns:name" → current value
-    this.variablesTs   = {};       // "ns:name" → source timestamp
-    this.variablesStatus = {};     // "ns:name" → StatusCode
-    this.users         = [];       // User credentials array
-    this.initialized   = false;
-    this.isClosing     = false;
-    this.cmdQueue      = [];       // Messages queued while server is starting
+    this.variables = {}; // "ns:name" → current value
+    this.variablesTs = {}; // "ns:name" → source timestamp
+    this.variablesStatus = {}; // "ns:name" → StatusCode
+    this.users = []; // User credentials array
+    this.initialized = false;
+    this.isClosing = false;
+    this.cmdQueue = []; // Messages queued while server is starting
 
     // ── Load users from file ───────────────────────────────────────────
     loadUsersFromFile(node);
@@ -120,16 +119,16 @@ module.exports = function (RED) {
     if (this.startOnDeploy) {
       startServer();
     } else {
-      setNodeStatus("waiting");
+      setNodeStatus('waiting');
     }
 
     // ═══════════════════════════════════════════════════════════════════
     //  INPUT HANDLER
     // ═══════════════════════════════════════════════════════════════════
 
-    node.on("input", async (msg, send, done) => {
+    node.on('input', async (msg, send, done) => {
       // Allow lifecycle commands even when server is not running
-      const lifecycleCommands = ["startOPCUAServer", "restartOPCUAServer", "closeOPCUAServer"];
+      const lifecycleCommands = ['startOPCUAServer', 'restartOPCUAServer', 'closeOPCUAServer'];
       const command = msg.command;
 
       if (!node.initialized || !node.server) {
@@ -153,8 +152,8 @@ module.exports = function (RED) {
           return;
         }
 
-        setNodeStatus("error", "server not initialized");
-        node.warn("Server not initialized, closed by command");
+        setNodeStatus('error', 'server not initialized');
+        node.warn('Server not initialized, closed by command');
         done();
         return;
       }
@@ -168,7 +167,7 @@ module.exports = function (RED) {
           done();
         }
       } catch (err) {
-        setNodeStatus("command error", err.message);
+        setNodeStatus('command error', err.message);
         node.error(`Input handler error: ${err.message}`, msg);
         done(err);
       }
@@ -178,14 +177,14 @@ module.exports = function (RED) {
     //  CLOSE HANDLER
     // ═══════════════════════════════════════════════════════════════════
 
-    node.on("close", async (done) => {
+    node.on('close', async (done) => {
       node.isClosing = true;
-      setNodeStatus("shutting down");
+      setNodeStatus('shutting down');
       try {
         if (node.server) {
           await node.server.shutdown(0);
           node.server.dispose();
-          node.log("Server shut down");
+          node.log('Server shut down');
         }
       } catch (err) {
         node.warn(`Server shutdown error: ${err.message}`);
@@ -201,17 +200,17 @@ module.exports = function (RED) {
 
     async function startServer() {
       try {
-        setNodeStatus("connecting");
+        setNodeStatus('connecting');
 
         // Initialize certificate managers
         const serverCertManager = new opcua.OPCUACertificateManager({
-          rootFolder: path.join(envPaths.config, "ServerPKI"),
+          rootFolder: path.join(envPaths.config, 'ServerPKI'),
           automaticallyAcceptUnknownCertificate: node.autoAcceptUnknownCertificate,
         });
         await serverCertManager.initialize();
 
         const userCertManager = new opcua.OPCUACertificateManager({
-          rootFolder: path.join(envPaths.config, "UserPKI"),
+          rootFolder: path.join(envPaths.config, 'UserPKI'),
           automaticallyAcceptUnknownCertificate: true,
         });
         await userCertManager.initialize();
@@ -227,8 +226,10 @@ module.exports = function (RED) {
         if (node.endpointBasic128Rsa15) securityPolicies.push(opcua.SecurityPolicy.Basic128Rsa15);
         if (node.endpointBasic256) securityPolicies.push(opcua.SecurityPolicy.Basic256);
         if (node.endpointBasic256Sha256) securityPolicies.push(opcua.SecurityPolicy.Basic256Sha256);
-        if (node.endpointAes128Sha256RsaOaep) securityPolicies.push(opcua.SecurityPolicy.Aes128_Sha256_RsaOaep);
-        if (node.endpointAes256Sha256RsaPss) securityPolicies.push(opcua.SecurityPolicy.Aes256_Sha256_RsaPss);
+        if (node.endpointAes128Sha256RsaOaep)
+          securityPolicies.push(opcua.SecurityPolicy.Aes128_Sha256_RsaOaep);
+        if (node.endpointAes256Sha256RsaPss)
+          securityPolicies.push(opcua.SecurityPolicy.Aes256_Sha256_RsaPss);
 
         // Collect nodeset XML files
         const nodesetFiles = collectNodesetFiles(node);
@@ -250,12 +251,12 @@ module.exports = function (RED) {
           maxSubscriptionsPerSession: node.maxSubscriptionsPerSession,
           timeout: node.sessionTimeout,
           serverInfo: {
-            applicationUri: opcua.makeApplicationUrn(hostname, "BRDK-NodeRED-OPCUA-Server"),
-            productUri: "BRDK-NodeRED-OPCUA-Server",
-            applicationName: { text: node.name || "BRDK Node-RED OPCUA Server", locale: "en" },
+            applicationUri: opcua.makeApplicationUrn(hostname, 'BRDK-NodeRED-OPCUA-Server'),
+            productUri: 'BRDK-NodeRED-OPCUA-Server',
+            applicationName: { text: node.name || 'BRDK Node-RED OPCUA Server', locale: 'en' },
           },
           buildInfo: {
-            buildNumber: "1.0.0",
+            buildNumber: '1.0.0',
             buildDate: new Date(),
           },
           serverCapabilities: {
@@ -272,7 +273,7 @@ module.exports = function (RED) {
         };
 
         // Create and start server
-        setNodeStatus("initialized");
+        setNodeStatus('initialized');
         node.server = new opcua.OPCUAServer(serverOptions);
         await node.server.initialize();
 
@@ -296,14 +297,13 @@ module.exports = function (RED) {
         registerSessionHandlers();
 
         const port = node.server.endpoints?.[0]?.port || node.port;
-        setNodeStatus("running", `port ${port}`);
+        setNodeStatus('running', `port ${port}`);
         node.log(`OPC UA Server running on port ${port}`);
 
         // Replay any queued commands
         replayCommandQueue();
-
       } catch (err) {
-        handleCommandError("error", err, {}, () => {});
+        handleCommandError('error', err, {}, () => {});
       }
     }
 
@@ -330,36 +330,36 @@ module.exports = function (RED) {
 
     async function handleCommand(command, msg, send, done) {
       const handlers = {
-        restartOPCUAServer:   () => cmdRestartServer(msg, send, done),
-        startOPCUAServer:     () => cmdStartServer(msg, send, done),
-        closeOPCUAServer:     () => cmdCloseServer(msg, send, done),
-        addVariable:          () => cmdAddVariable(msg, send, done),
-        addFolder:            () => cmdAddFolder(msg, send, done),
-        setFolder:            () => cmdSetFolder(msg, send, done),
-        deleteNode:           () => cmdDeleteNode(msg, send, done),
-        addEquipment:         () => cmdAddEquipment(msg, send, done),
-        addPhysicalAsset:     () => cmdAddPhysicalAsset(msg, send, done),
-        addMethod:            () => cmdAddMethod(msg, send, done),
-        bindMethod:           () => cmdBindMethod(msg, send, done),
-        installHistorian:     () => cmdInstallHistorian(msg, send, done),
+        restartOPCUAServer: () => cmdRestartServer(msg, send, done),
+        startOPCUAServer: () => cmdStartServer(msg, send, done),
+        closeOPCUAServer: () => cmdCloseServer(msg, send, done),
+        addVariable: () => cmdAddVariable(msg, send, done),
+        addFolder: () => cmdAddFolder(msg, send, done),
+        setFolder: () => cmdSetFolder(msg, send, done),
+        deleteNode: () => cmdDeleteNode(msg, send, done),
+        addEquipment: () => cmdAddEquipment(msg, send, done),
+        addPhysicalAsset: () => cmdAddPhysicalAsset(msg, send, done),
+        addMethod: () => cmdAddMethod(msg, send, done),
+        bindMethod: () => cmdBindMethod(msg, send, done),
+        installHistorian: () => cmdInstallHistorian(msg, send, done),
         installDiscreteAlarm: () => cmdInstallDiscreteAlarm(msg, send, done),
-        installLimitAlarm:    () => cmdInstallLimitAlarm(msg, send, done),
-        addExtensionObject:   () => cmdAddExtensionObject(msg, send, done),
-        addFile:              () => cmdAddFile(msg, send, done),
-        registerNamespace:    () => cmdRegisterNamespace(msg, send, done),
-        getNamespaceIndex:    () => cmdGetNamespaceIndex(msg, send, done),
-        getNamespaces:        () => cmdGetNamespaces(msg, send, done),
-        setUsers:             () => cmdSetUsers(msg, send, done),
-        saveAddressSpace:     () => cmdSaveAddressSpace(msg, send, done),
-        loadAddressSpace:     () => cmdLoadAddressSpace(msg, send, done),
-        bindVariables:        () => cmdBindVariables(msg, send, done),
+        installLimitAlarm: () => cmdInstallLimitAlarm(msg, send, done),
+        addExtensionObject: () => cmdAddExtensionObject(msg, send, done),
+        addFile: () => cmdAddFile(msg, send, done),
+        registerNamespace: () => cmdRegisterNamespace(msg, send, done),
+        getNamespaceIndex: () => cmdGetNamespaceIndex(msg, send, done),
+        getNamespaces: () => cmdGetNamespaces(msg, send, done),
+        setUsers: () => cmdSetUsers(msg, send, done),
+        saveAddressSpace: () => cmdSaveAddressSpace(msg, send, done),
+        loadAddressSpace: () => cmdLoadAddressSpace(msg, send, done),
+        bindVariables: () => cmdBindVariables(msg, send, done),
       };
 
       const handler = handlers[command];
       if (handler) {
         await handler();
       } else {
-        setNodeStatus("command error", `unknown: ${command}`);
+        setNodeStatus('command error', `unknown: ${command}`);
         node.warn(`Unknown OPC UA command: ${command}`);
         done();
       }
@@ -372,7 +372,7 @@ module.exports = function (RED) {
     function handleVariableUpdates(msg, send, done) {
       const addressSpace = node.server.engine.addressSpace;
       handleItemsVariableUpdate(addressSpace, msg.items);
-      setNodeStatus("updating variables", `${msg.items.length} item(s)`);
+      setNodeStatus('updating variables', `${msg.items.length} item(s)`);
       done();
     }
 
@@ -391,7 +391,7 @@ module.exports = function (RED) {
         }
 
         const key = deriveVariableKey(item.nodeId);
-        const datatype = item.datatype || "Double";
+        const datatype = item.datatype || 'Double';
 
         node.variables[key] = item.value;
 
@@ -427,12 +427,12 @@ module.exports = function (RED) {
      * Restart the OPC UA server.
      */
     async function cmdRestartServer(msg, send, done) {
-      setNodeStatus("restarting");
+      setNodeStatus('restarting');
       node.initialized = false;
 
       try {
         if (node.server) {
-          node.server.engine.setShutdownReason("Restart command received");
+          node.server.engine.setShutdownReason('Restart command received');
           await node.server.shutdown(10000);
           node.server.dispose();
           node.server = null;
@@ -440,11 +440,11 @@ module.exports = function (RED) {
         }
 
         await startServer();
-        msg.payload = "Server restarted";
+        msg.payload = 'Server restarted';
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -453,7 +453,7 @@ module.exports = function (RED) {
      */
     async function cmdStartServer(msg, send, done) {
       if (node.initialized && node.server) {
-        msg.payload = "Server already running";
+        msg.payload = 'Server already running';
         send([msg, null]);
         done();
         return;
@@ -461,11 +461,11 @@ module.exports = function (RED) {
 
       try {
         await startServer();
-        msg.payload = "Server started";
+        msg.payload = 'Server started';
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -474,28 +474,28 @@ module.exports = function (RED) {
      */
     async function cmdCloseServer(msg, send, done) {
       if (!node.server) {
-        setNodeStatus("server stopped");
-        msg.payload = "Server already stopped";
+        setNodeStatus('server stopped');
+        msg.payload = 'Server already stopped';
         send([msg, null]);
         done();
         return;
       }
 
       try {
-        setNodeStatus("shutting down");
+        setNodeStatus('shutting down');
         node.initialized = false;
-        node.server.engine.setShutdownReason("Close command received");
+        node.server.engine.setShutdownReason('Close command received');
         await node.server.shutdown(10000);
         node.server.dispose();
         node.server = null;
         node.vendorName = null;
 
-        setNodeStatus("server stopped");
-        msg.payload = "Server stopped";
+        setNodeStatus('server stopped');
+        msg.payload = 'Server stopped';
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -509,25 +509,24 @@ module.exports = function (RED) {
       const items = msg.items || [];
 
       if (items.length === 0) {
-        node.warn("addVariable requires msg.items with at least one item (nodeId, datatype)");
+        node.warn('addVariable requires msg.items with at least one item (nodeId, datatype)');
         done();
         return;
       }
 
       const parentFolder = node.currentFolder || node.vendorName;
       if (!parentFolder) {
-        node.warn("No parent folder set — use setFolder or constructDefaultAddressSpace");
+        node.warn('No parent folder set — use setFolder or constructDefaultAddressSpace');
         done();
         return;
       }
 
       try {
-        const namespace = addressSpace.getOwnNamespace();
         const outputItems = [];
 
         for (const item of items) {
           if (!item.nodeId || !item.datatype) {
-            node.warn("addVariable item missing nodeId or datatype, skipping");
+            node.warn('addVariable item missing nodeId or datatype, skipping');
             continue;
           }
 
@@ -552,11 +551,11 @@ module.exports = function (RED) {
         }
 
         msg.items = outputItems;
-        setNodeStatus("variable added", `${outputItems.length} variable(s)`);
+        setNodeStatus('variable added', `${outputItems.length} variable(s)`);
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -570,25 +569,24 @@ module.exports = function (RED) {
       const items = msg.items || [];
 
       if (items.length === 0) {
-        node.warn("addFolder requires msg.items with at least one item (nodeId)");
+        node.warn('addFolder requires msg.items with at least one item (nodeId)');
         done();
         return;
       }
 
       const parentFolder = node.currentFolder || node.vendorName;
       if (!parentFolder) {
-        node.warn("No parent folder set");
+        node.warn('No parent folder set');
         done();
         return;
       }
 
       try {
-        const namespace = addressSpace.getOwnNamespace();
         for (const item of items) {
           const name = item.browseName || deriveNodeName(item.nodeId);
           const folderOpts = {
             organizedBy: parentFolder,
-            typeDefinition: "FolderType",
+            typeDefinition: 'FolderType',
             browseName: name,
             displayName: item.displayName || name,
             nodeId: item.nodeId,
@@ -602,12 +600,12 @@ module.exports = function (RED) {
           const itemNs = resolveNamespace(addressSpace, item.nodeId);
           itemNs.addObject(folderOpts);
         }
-        setNodeStatus("folder added", `${items.length} folder(s)`);
+        setNodeStatus('folder added', `${items.length} folder(s)`);
         msg.payload = `${items.length} folder(s) added`;
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -619,7 +617,7 @@ module.exports = function (RED) {
       const nodeId = msg.items?.[0]?.nodeId || msg.nodeId;
 
       if (!nodeId) {
-        node.warn("setFolder requires msg.nodeId or msg.items[0].nodeId");
+        node.warn('setFolder requires msg.nodeId or msg.items[0].nodeId');
         done();
         return;
       }
@@ -627,7 +625,7 @@ module.exports = function (RED) {
       const folder = addressSpace.findNode(nodeId);
       if (folder) {
         node.currentFolder = folder;
-        setNodeStatus("folder set", nodeId);
+        setNodeStatus('folder set', nodeId);
         msg.payload = `Current folder set to ${nodeId}`;
         send([msg, null]);
       } else {
@@ -647,15 +645,13 @@ module.exports = function (RED) {
       const singleNodeId = msg.nodeId;
 
       if (items.length === 0 && !singleNodeId) {
-        node.warn("deleteNode requires msg.nodeId or msg.items");
+        node.warn('deleteNode requires msg.nodeId or msg.items');
         done();
         return;
       }
 
       try {
-        const nodeIds = items.length > 0
-          ? items.map(i => i.nodeId)
-          : [singleNodeId];
+        const nodeIds = items.length > 0 ? items.map((i) => i.nodeId) : [singleNodeId];
 
         for (const nid of nodeIds) {
           const nodeToDelete = addressSpace.findNode(nid);
@@ -665,12 +661,12 @@ module.exports = function (RED) {
             node.warn(`Node not found for deletion: ${nid}`);
           }
         }
-        setNodeStatus("node deleted", `${nodeIds.length} node(s)`);
+        setNodeStatus('node deleted', `${nodeIds.length} node(s)`);
         msg.payload = `${nodeIds.length} node(s) deleted`;
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -682,7 +678,7 @@ module.exports = function (RED) {
       const name = msg.nodeName;
 
       if (!name || !node.vendorName) {
-        node.warn("addEquipment requires msg.nodeName and a default address space");
+        node.warn('addEquipment requires msg.nodeName and a default address space');
         done();
         return;
       }
@@ -695,12 +691,12 @@ module.exports = function (RED) {
           displayName: name,
           eventSourceOf: addressSpace.rootFolder.objects.server,
         });
-        setNodeStatus("equipment added", name);
+        setNodeStatus('equipment added', name);
         msg.payload = `Equipment added: ${name}`;
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -712,7 +708,7 @@ module.exports = function (RED) {
       const name = msg.nodeName;
 
       if (!name || !node.vendorName) {
-        node.warn("addPhysicalAsset requires msg.nodeName");
+        node.warn('addPhysicalAsset requires msg.nodeName');
         done();
         return;
       }
@@ -724,12 +720,12 @@ module.exports = function (RED) {
           browseName: name,
           displayName: name,
         });
-        setNodeStatus("asset added", name);
+        setNodeStatus('asset added', name);
         msg.payload = `Physical asset added: ${name}`;
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -744,7 +740,7 @@ module.exports = function (RED) {
       const outputArgs = msg.outputArguments || [];
 
       if (!parentNodeId || !methodName) {
-        node.warn("addMethod requires msg.parentNodeId and msg.methodName");
+        node.warn('addMethod requires msg.parentNodeId and msg.methodName');
         done();
         return;
       }
@@ -758,15 +754,15 @@ module.exports = function (RED) {
         }
 
         const methodInputArgs = inputArgs.map((arg) => ({
-          name: arg.name || "input",
-          description: arg.text || "",
-          dataType: toOpcuaDataType(arg.type || "String"),
+          name: arg.name || 'input',
+          description: arg.text || '',
+          dataType: toOpcuaDataType(arg.type || 'String'),
         }));
 
         const methodOutputArgs = outputArgs.map((arg) => ({
-          name: arg.name || "output",
-          description: arg.text || "",
-          dataType: toOpcuaDataType(arg.type || "String"),
+          name: arg.name || 'output',
+          description: arg.text || '',
+          dataType: toOpcuaDataType(arg.type || 'String'),
         }));
 
         const namespace = addressSpace.getOwnNamespace();
@@ -781,12 +777,12 @@ module.exports = function (RED) {
           callback(null, { statusCode: opcua.StatusCodes.BadNotImplemented });
         });
 
-        setNodeStatus("method added", methodName);
+        setNodeStatus('method added', methodName);
         msg.payload = `Method added: ${methodName}`;
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -799,7 +795,7 @@ module.exports = function (RED) {
       const methodFunc = msg.code;
 
       if (!methodNodeId || !methodFunc) {
-        node.warn("bindMethod requires msg.nodeId and msg.code (function)");
+        node.warn('bindMethod requires msg.nodeId and msg.code (function)');
         done();
         return;
       }
@@ -813,12 +809,12 @@ module.exports = function (RED) {
         }
 
         method.bindMethod(methodFunc);
-        setNodeStatus("method bound", methodNodeId);
+        setNodeStatus('method bound', methodNodeId);
         msg.payload = `Method bound: ${methodNodeId}`;
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -832,7 +828,7 @@ module.exports = function (RED) {
       const items = msg.items || [];
 
       if (items.length === 0) {
-        node.warn("installHistorian requires msg.items with nodeId(s)");
+        node.warn('installHistorian requires msg.items with nodeId(s)');
         done();
         return;
       }
@@ -849,12 +845,12 @@ module.exports = function (RED) {
             maxOnlineValues: 1000,
           });
         }
-        setNodeStatus("historian installed", `${items.length} variable(s)`);
+        setNodeStatus('historian installed', `${items.length} variable(s)`);
         msg.payload = `Historian installed on ${items.length} variable(s)`;
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -868,7 +864,7 @@ module.exports = function (RED) {
       const items = msg.items || [];
 
       if (items.length === 0) {
-        node.warn("installDiscreteAlarm requires msg.items with nodeId(s)");
+        node.warn('installDiscreteAlarm requires msg.items with nodeId(s)');
         done();
         return;
       }
@@ -893,21 +889,21 @@ module.exports = function (RED) {
           const alarmStateVar = namespace.addVariable({
             propertyOf: parentNode,
             browseName: `${name}AlarmState`,
-            dataType: "Boolean",
+            dataType: 'Boolean',
             value: { dataType: opcua.DataType.Boolean, value: false },
           });
 
           // Create the DiscreteAlarm
-          const alarm = namespace.instantiateDiscreteAlarm("DiscreteAlarmType", {
+          const alarm = namespace.instantiateDiscreteAlarm('DiscreteAlarmType', {
             componentOf: parentNode,
             browseName: `${name}DiscreteAlarm`,
             conditionSource: alarmStateVar,
             inputNode: alarmStateVar,
-            optionals: ["Acknowledge", "ConfirmedState", "Confirm"],
+            optionals: ['Acknowledge', 'ConfirmedState', 'Confirm'],
           });
 
           // React to alarm state changes
-          alarmStateVar.on("value_changed", (_event, dataValue) => {
+          alarmStateVar.on('value_changed', (_event, dataValue) => {
             const active = dataValue.value.value;
             if (active) {
               alarm.activateAlarm();
@@ -924,12 +920,12 @@ module.exports = function (RED) {
           });
         }
 
-        setNodeStatus("alarm installed", `discrete, ${items.length} node(s)`);
+        setNodeStatus('alarm installed', `discrete, ${items.length} node(s)`);
         msg.payload = `Discrete alarm installed on ${items.length} node(s)`;
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -943,7 +939,7 @@ module.exports = function (RED) {
       const items = msg.items || [];
 
       if (items.length === 0) {
-        node.warn("installLimitAlarm requires msg.items with nodeId(s)");
+        node.warn('installLimitAlarm requires msg.items with nodeId(s)');
         done();
         return;
       }
@@ -951,8 +947,8 @@ module.exports = function (RED) {
       try {
         const severity = msg.priority || 100;
         const hh = msg.hh ?? 90;
-        const h  = msg.h  ?? 70;
-        const l  = msg.l  ?? 30;
+        const h = msg.h ?? 70;
+        const l = msg.l ?? 30;
         const ll = msg.ll ?? 10;
 
         for (const item of items) {
@@ -973,15 +969,19 @@ module.exports = function (RED) {
           const limitStateVar = namespace.addVariable({
             propertyOf: parentNode,
             browseName: `${name}LimitState`,
-            dataType: "Double",
+            dataType: 'Double',
             value: {
-              get: () => new opcua.Variant({ dataType: opcua.DataType.Double, value: currentLimitValue }),
-              set: (v) => { currentLimitValue = v.value; return opcua.StatusCodes.Good; },
+              get: () =>
+                new opcua.Variant({ dataType: opcua.DataType.Double, value: currentLimitValue }),
+              set: (v) => {
+                currentLimitValue = v.value;
+                return opcua.StatusCodes.Good;
+              },
             },
           });
 
           // Create the NonExclusiveLimitAlarm
-          const alarm = namespace.instantiateNonExclusiveLimitAlarm("NonExclusiveLimitAlarmType", {
+          const alarm = namespace.instantiateNonExclusiveLimitAlarm('NonExclusiveLimitAlarmType', {
             componentOf: parentNode,
             browseName: `${name}LimitAlarm`,
             conditionSource: limitStateVar,
@@ -990,11 +990,11 @@ module.exports = function (RED) {
             highLimit: h,
             lowLimit: l,
             lowLowLimit: ll,
-            optionals: ["Acknowledge", "ConfirmedState", "Confirm"],
+            optionals: ['Acknowledge', 'ConfirmedState', 'Confirm'],
           });
 
           // On value change, activate alarm
-          limitStateVar.on("value_changed", () => {
+          limitStateVar.on('value_changed', () => {
             alarm.activateAlarm();
             alarm.raiseNewCondition({
               severity,
@@ -1005,12 +1005,12 @@ module.exports = function (RED) {
           });
         }
 
-        setNodeStatus("alarm installed", `limit, ${items.length} node(s)`);
+        setNodeStatus('alarm installed', `limit, ${items.length} node(s)`);
         msg.payload = `Limit alarm installed on ${items.length} node(s)`;
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -1024,7 +1024,7 @@ module.exports = function (RED) {
       const items = msg.items || [];
 
       if (items.length === 0 || !items[0].nodeId || !items[0].typeId) {
-        node.warn("addExtensionObject requires msg.items[0] with nodeId and typeId");
+        node.warn('addExtensionObject requires msg.items[0] with nodeId and typeId');
         done();
         return;
       }
@@ -1049,12 +1049,12 @@ module.exports = function (RED) {
           },
         });
 
-        setNodeStatus("extension object added", name);
+        setNodeStatus('extension object added', name);
         msg.payload = `Extension object added: ${name}`;
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -1069,18 +1069,17 @@ module.exports = function (RED) {
       const fileName = msg.fileName;
 
       if (!nodeId || !fileName) {
-        node.warn("addFile requires nodeId (msg.items[0].nodeId or msg.nodeId) and msg.fileName");
+        node.warn('addFile requires nodeId (msg.items[0].nodeId or msg.nodeId) and msg.fileName');
         done();
         return;
       }
 
       try {
         const parentFolder = node.currentFolder || node.vendorName;
-        const namespace = addressSpace.getOwnNamespace();
         const name = deriveNodeName(nodeId);
 
         // Instantiate a FileType node, then install file transfer support
-        const fileType = addressSpace.findObjectType("FileType");
+        const fileType = addressSpace.findObjectType('FileType');
         const fileNode = fileType.instantiate({
           organizedBy: parentFolder,
           browseName: name || fileName,
@@ -1089,15 +1088,15 @@ module.exports = function (RED) {
 
         installFileType(fileNode, {
           filename: fileName,
-          mimeType: "application/octet-stream",
+          mimeType: 'application/octet-stream',
         });
 
-        setNodeStatus("file added", fileName);
+        setNodeStatus('file added', fileName);
         msg.payload = `File added: ${fileName}`;
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -1109,7 +1108,7 @@ module.exports = function (RED) {
       const namespaceUri = msg.namespaceUri;
 
       if (!namespaceUri) {
-        node.warn("registerNamespace requires msg.namespaceUri");
+        node.warn('registerNamespace requires msg.namespaceUri');
         done();
         return;
       }
@@ -1117,11 +1116,11 @@ module.exports = function (RED) {
       try {
         const ns = addressSpace.registerNamespace(namespaceUri);
         msg.payload = `ns=${ns.index}`;
-        setNodeStatus("namespace registered", namespaceUri);
+        setNodeStatus('namespace registered', namespaceUri);
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -1133,18 +1132,18 @@ module.exports = function (RED) {
       const namespaceUri = msg.namespaceUri;
 
       if (!namespaceUri) {
-        node.warn("getNamespaceIndex requires msg.namespaceUri");
+        node.warn('getNamespaceIndex requires msg.namespaceUri');
         done();
         return;
       }
 
       try {
         const ns = addressSpace.getNamespace(namespaceUri);
-        msg.payload = ns ? `ns=${ns.index}` : "Namespace not found";
+        msg.payload = ns ? `ns=${ns.index}` : 'Namespace not found';
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -1171,13 +1170,13 @@ module.exports = function (RED) {
       const newUsers = msg.users;
 
       if (!Array.isArray(newUsers)) {
-        node.warn("setUsers requires msg.users as an array");
+        node.warn('setUsers requires msg.users as an array');
         done();
         return;
       }
 
       node.users = newUsers;
-      setNodeStatus("users updated", `${newUsers.length} user(s)`);
+      setNodeStatus('users updated', `${newUsers.length} user(s)`);
       node.log(`Users updated: ${newUsers.length} user(s)`);
       msg.payload = `${newUsers.length} user(s) updated`;
       send([msg, null]);
@@ -1201,13 +1200,13 @@ module.exports = function (RED) {
         }
 
         const xmlContent = ns.toNodeset2XML();
-        fs.writeFileSync(filename, xmlContent, "utf8");
+        fs.writeFileSync(filename, xmlContent, 'utf8');
         msg.payload = `Address space saved to ${filename}`;
-        setNodeStatus("address space saved", filename);
+        setNodeStatus('address space saved', filename);
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -1218,7 +1217,7 @@ module.exports = function (RED) {
       const filename = msg.filename;
 
       if (!filename) {
-        node.warn("loadAddressSpace requires msg.filename");
+        node.warn('loadAddressSpace requires msg.filename');
         done();
         return;
       }
@@ -1230,7 +1229,7 @@ module.exports = function (RED) {
       }
 
       node.log(`Loading address space from ${filename} — server will restart`);
-      setNodeStatus("address space loaded", filename);
+      setNodeStatus('address space loaded', filename);
       // Store the file path for the next start cycle to load it as a nodeset
       node._loadedAddressSpaceFile = filename;
       await cmdRestartServer(msg, send, done);
@@ -1247,23 +1246,23 @@ module.exports = function (RED) {
         const crawler = new NodeCrawler(session);
         const results = [];
 
-        crawler.on("browsed", (element) => {
+        crawler.on('browsed', (element) => {
           if (element.nodeId && element.nodeClass === opcua.NodeClass.Variable) {
             results.push({
               nodeId: element.nodeId.toString(),
-              browseName: element.browseName?.toString() || "",
+              browseName: element.browseName?.toString() || '',
             });
           }
         });
 
-        await crawler.read(opcua.resolveNodeId("RootFolder"));
+        await crawler.read(opcua.resolveNodeId('RootFolder'));
 
         for (const item of results) {
           const vnode = addressSpace.findNode(item.nodeId);
           if (vnode && vnode.nodeClass === opcua.NodeClass.Variable) {
             try {
               const key = item.browseName || item.nodeId;
-              bindVariableGetSet(vnode, key, "Double", node.send.bind(node));
+              bindVariableGetSet(vnode, key, 'Double', node.send.bind(node));
             } catch {
               // Some nodes may not support binding
             }
@@ -1271,11 +1270,11 @@ module.exports = function (RED) {
         }
 
         msg.payload = `Bound ${results.length} variables`;
-        setNodeStatus("variables bound", `${results.length} variable(s)`);
+        setNodeStatus('variables bound', `${results.length} variable(s)`);
         send([msg, null]);
         done();
       } catch (err) {
-        handleCommandError("command error", err, msg, done);
+        handleCommandError('command error', err, msg, done);
       }
     }
 
@@ -1290,51 +1289,53 @@ module.exports = function (RED) {
       // Create vendor-specific root object
       node.vendorName = namespace.addObject({
         organizedBy: addressSpace.rootFolder.objects,
-        browseName: "VendorName",
-        displayName: "Vendor Name",
+        browseName: 'VendorName',
+        displayName: 'Vendor Name',
         eventSourceOf: addressSpace.rootFolder.objects.server,
       });
 
       // Equipment and Physical Assets folders
       namespace.addObject({
         organizedBy: node.vendorName,
-        browseName: "Equipment",
-        displayName: "Equipment",
+        browseName: 'Equipment',
+        displayName: 'Equipment',
       });
 
       namespace.addObject({
         organizedBy: node.vendorName,
-        browseName: "PhysicalAssets",
-        displayName: "Physical Assets",
+        browseName: 'PhysicalAssets',
+        displayName: 'Physical Assets',
       });
 
       // Default variables
-      const freeMemVar = namespace.addVariable({
+      namespace.addVariable({
         componentOf: node.vendorName,
-        browseName: "FreeMemory",
-        displayName: "Free Memory",
-        nodeId: "s=FreeMemory",
-        dataType: "Double",
+        browseName: 'FreeMemory',
+        displayName: 'Free Memory',
+        nodeId: 's=FreeMemory',
+        dataType: 'Double',
         value: {
-          get: () => new opcua.Variant({
-            dataType: opcua.DataType.Double,
-            value: os.freemem() / os.totalmem() * 100,
-          }),
+          get: () =>
+            new opcua.Variant({
+              dataType: opcua.DataType.Double,
+              value: (os.freemem() / os.totalmem()) * 100,
+            }),
         },
       });
 
       let counterValue = 0;
-      const counterVar = namespace.addVariable({
+      namespace.addVariable({
         componentOf: node.vendorName,
-        browseName: "Counter",
-        displayName: "Counter",
-        nodeId: "s=Counter",
-        dataType: "UInt32",
+        browseName: 'Counter',
+        displayName: 'Counter',
+        nodeId: 's=Counter',
+        dataType: 'UInt32',
         value: {
-          get: () => new opcua.Variant({
-            dataType: opcua.DataType.UInt32,
-            value: counterValue++,
-          }),
+          get: () =>
+            new opcua.Variant({
+              dataType: opcua.DataType.UInt32,
+              value: counterValue++,
+            }),
         },
       });
 
@@ -1349,34 +1350,43 @@ module.exports = function (RED) {
     function registerSessionHandlers() {
       const server = node.server;
 
-      server.on("create_session", (session) => {
+      server.on('create_session', (session) => {
         if (node.isClosing) return;
-        const name = session.sessionName || "unknown";
-        setNodeStatus("client connected", name);
-        node.send([{
-          topic: "Client-connected",
-          payload: name,
-        }, null]);
+        const name = session.sessionName || 'unknown';
+        setNodeStatus('client connected', name);
+        node.send([
+          {
+            topic: 'Client-connected',
+            payload: name,
+          },
+          null,
+        ]);
       });
 
-      server.on("session_closed", (session, reason) => {
+      server.on('session_closed', (session, _reason) => {
         if (node.isClosing) return;
-        const name = session.sessionName || "unknown";
-        setNodeStatus("client disconnected", name);
-        node.send([{
-          topic: "Client-disconnected",
-          payload: name,
-        }, null]);
+        const name = session.sessionName || 'unknown';
+        setNodeStatus('client disconnected', name);
+        node.send([
+          {
+            topic: 'Client-disconnected',
+            payload: name,
+          },
+          null,
+        ]);
       });
 
-      server.on("session_activated", (session) => {
+      server.on('session_activated', (session) => {
         if (node.isClosing) return;
         if (session.userIdentityToken?.userName) {
-          setNodeStatus("session activated", session.userIdentityToken.userName);
-          node.send([{
-            topic: "Username",
-            payload: session.userIdentityToken.userName,
-          }, null]);
+          setNodeStatus('session activated', session.userIdentityToken.userName);
+          node.send([
+            {
+              topic: 'Username',
+              payload: session.userIdentityToken.userName,
+            },
+            null,
+          ]);
         }
       });
     }
@@ -1430,14 +1440,19 @@ module.exports = function (RED) {
 
         // Notify downstream when a client writes
         if (sendFn) {
-          sendFn([{
-            items: [{
-              nodeId: variableNode.nodeId.toString(),
-              datatype: datatype,
-              browseName: key,
-              value: newValue,
-            }],
-          }, null]);
+          sendFn([
+            {
+              items: [
+                {
+                  nodeId: variableNode.nodeId.toString(),
+                  datatype: datatype,
+                  browseName: key,
+                  value: newValue,
+                },
+              ],
+            },
+            null,
+          ]);
         }
 
         return opcua.StatusCodes.Good;
@@ -1453,13 +1468,12 @@ module.exports = function (RED) {
      * Set the node status display and send a status message on output 2.
      */
     function setNodeStatus(statusKey, detail) {
-      const status = detail
-        ? getStatusWithDetail(statusKey, detail)
-        : getStatus(statusKey);
+      const status = detail ? getStatusWithDetail(statusKey, detail) : getStatus(statusKey);
       node.status(status);
 
       // Send status notification on output 2
-      const isError = statusKey.includes("error") || statusKey === "disconnected" || statusKey === "terminated";
+      const isError =
+        statusKey.includes('error') || statusKey === 'disconnected' || statusKey === 'terminated';
       const statusMsg = {
         payload: statusKey,
         status: statusKey,
@@ -1479,7 +1493,7 @@ module.exports = function (RED) {
     }
   }
 
-  RED.nodes.registerType("opcua-server", OpcUaServerNode);
+  RED.nodes.registerType('opcua-server', OpcUaServerNode);
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1495,13 +1509,13 @@ function loadUsersFromFile(node) {
   const candidates = [
     node.usersFile,
     path.join(process.cwd(), node.usersFile),
-    path.join(process.cwd(), ".node-red", node.usersFile),
+    path.join(process.cwd(), '.node-red', node.usersFile),
   ];
 
   for (const filepath of candidates) {
     try {
       if (fs.existsSync(filepath)) {
-        const data = JSON.parse(fs.readFileSync(filepath, "utf8"));
+        const data = JSON.parse(fs.readFileSync(filepath, 'utf8'));
         node.users = Array.isArray(data) ? data : [];
         node.log(`Loaded ${node.users.length} user(s) from ${filepath}`);
         return;
@@ -1520,8 +1534,9 @@ function collectNodesetFiles(node) {
 
   // Custom nodeset directory
   if (node.nodesetDir && fs.existsSync(node.nodesetDir)) {
-    const customFiles = fs.readdirSync(node.nodesetDir)
-      .filter((f) => f.endsWith(".xml"))
+    const customFiles = fs
+      .readdirSync(node.nodesetDir)
+      .filter((f) => f.endsWith('.xml'))
       .map((f) => path.join(node.nodesetDir, f));
     files.push(...customFiles);
   }
@@ -1540,11 +1555,18 @@ function collectNodesetFiles(node) {
 function buildOperationLimits(node) {
   const limits = {};
   const fields = [
-    "maxNodesPerBrowse", "maxNodesPerHistoryReadData", "maxNodesPerHistoryReadEvents",
-    "maxNodesPerHistoryUpdateData", "maxNodesPerRead", "maxNodesPerWrite",
-    "maxNodesPerMethodCall", "maxNodesPerRegisterNodes", "maxNodesPerNodeManagement",
-    "maxMonitoredItemsPerCall", "maxNodesPerHistoryUpdateEvents",
-    "maxNodesPerTranslateBrowsePathsToNodeIds",
+    'maxNodesPerBrowse',
+    'maxNodesPerHistoryReadData',
+    'maxNodesPerHistoryReadEvents',
+    'maxNodesPerHistoryUpdateData',
+    'maxNodesPerRead',
+    'maxNodesPerWrite',
+    'maxNodesPerMethodCall',
+    'maxNodesPerRegisterNodes',
+    'maxNodesPerNodeManagement',
+    'maxMonitoredItemsPerCall',
+    'maxNodesPerHistoryUpdateEvents',
+    'maxNodesPerTranslateBrowsePathsToNodeIds',
   ];
 
   for (const field of fields) {
@@ -1559,8 +1581,8 @@ function buildOperationLimits(node) {
  */
 function buildVariableOptions(addressSpace, item, msg) {
   const datatype = item.datatype;
-  const isArray = datatype.includes("Array");
-  const baseType = datatype.replace("Array", "").replace(/\[.*\]/, "");
+  const isArray = datatype.includes('Array');
+  const baseType = datatype.replace('Array', '').replace(/\[.*\]/, '');
   const name = item.browseName || deriveNodeName(item.nodeId);
 
   const opts = {
@@ -1568,8 +1590,8 @@ function buildVariableOptions(addressSpace, item, msg) {
     displayName: item.displayName || name,
     nodeId: item.nodeId,
     dataType: baseType,
-    accessLevel: opcua.makeAccessLevelFlag("CurrentRead | CurrentWrite"),
-    userAccessLevel: opcua.makeAccessLevelFlag("CurrentRead | CurrentWrite"),
+    accessLevel: opcua.makeAccessLevelFlag('CurrentRead | CurrentWrite'),
+    userAccessLevel: opcua.makeAccessLevelFlag('CurrentRead | CurrentWrite'),
     rolePermissions: [
       { roleId: opcua.WellKnownRoles.Anonymous, permissions: opcua.allPermissions },
       { roleId: opcua.WellKnownRoles.AuthenticatedUser, permissions: opcua.allPermissions },
@@ -1585,7 +1607,7 @@ function buildVariableOptions(addressSpace, item, msg) {
   if (isArray) {
     const dimMatch = datatype.match(/\[([^\]]+)\]/);
     if (dimMatch) {
-      const dims = dimMatch[1].split(",").map(Number);
+      const dims = dimMatch[1].split(',').map(Number);
       opts.valueRank = dims.length;
       opts.arrayDimensions = dims;
     } else {
@@ -1640,11 +1662,17 @@ function toOpcuaDataType(typeStr) {
 function getDefaultForType(datatype) {
   const defaults = {
     Boolean: false,
-    Byte: 0, SByte: 0,
-    Int16: 0, Int32: 0, Int64: 0,
-    UInt16: 0, UInt32: 0, UInt64: 0,
-    Float: 0.0, Double: 0.0,
-    String: "",
+    Byte: 0,
+    SByte: 0,
+    Int16: 0,
+    Int32: 0,
+    Int64: 0,
+    UInt16: 0,
+    UInt32: 0,
+    UInt64: 0,
+    Float: 0.0,
+    Double: 0.0,
+    String: '',
     DateTime: new Date(),
     ByteString: Buffer.alloc(0),
   };
@@ -1656,8 +1684,8 @@ function getDefaultForType(datatype) {
  */
 function resolveStatusCode(quality) {
   if (!quality) return opcua.StatusCodes.Good;
-  if (typeof quality === "number") return opcua.StatusCode.makeStatusCode(quality);
-  if (typeof quality === "string" && opcua.StatusCodes[quality]) {
+  if (typeof quality === 'number') return opcua.StatusCode.makeStatusCode(quality);
+  if (typeof quality === 'string' && opcua.StatusCodes[quality]) {
     return opcua.StatusCodes[quality];
   }
   return opcua.StatusCodes.Good;
@@ -1667,15 +1695,18 @@ function resolveStatusCode(quality) {
  * Check if a message is a variable update.
  */
 function isVariableUpdate(msg) {
-  return Array.isArray(msg.items) && msg.items.length > 0
-    && msg.items.some((item) => item.value !== undefined);
+  return (
+    Array.isArray(msg.items) &&
+    msg.items.length > 0 &&
+    msg.items.some((item) => item.value !== undefined)
+  );
 }
 
 /**
  * Derive the node name (identifier) from a full nodeId string.
  */
 function deriveNodeName(nodeId) {
-  if (!nodeId) return "";
+  if (!nodeId) return '';
   const sMatch = nodeId.match(/s=([^;]+)/);
   if (sMatch) return sMatch[1];
   const iMatch = nodeId.match(/i=(\d+)/);
@@ -1690,8 +1721,8 @@ function deriveVariableKey(nodeId) {
   const nsMatch = nodeId.match(/ns=(\d+)/);
   const sMatch = nodeId.match(/s=([^;]+)/);
   const iMatch = nodeId.match(/i=(\d+)/);
-  const ns = nsMatch ? nsMatch[1] : "1";
-  const name = sMatch ? sMatch[1] : (iMatch ? iMatch[1] : nodeId);
+  const ns = nsMatch ? nsMatch[1] : '1';
+  const name = sMatch ? sMatch[1] : iMatch ? iMatch[1] : nodeId;
   return `${ns}:${name}`;
 }
 

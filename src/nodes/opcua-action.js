@@ -19,51 +19,50 @@
  *   Output 1 — Message with `msg.action` and sub-configuration set
  */
 
-"use strict";
+'use strict';
 
 module.exports = function (RED) {
-
   function OpcUaActionNode(config) {
     RED.nodes.createNode(this, config);
 
     // ── Common ─────────────────────────────────────────────────────────
-    this.action = config.action || "read";
-    this.name   = config.name   || "";
+    this.action = config.action || 'read';
+    this.name = config.name || '';
 
     // ── Monitor only ────────────────────────────────────────────────────
-    this.deadbandType  = config.deadbandtype || "a";
+    this.deadbandType = config.deadbandtype || 'a';
     this.deadbandValue = Number(config.deadbandvalue) || 1;
 
     // ── Events only ─────────────────────────────────────────────────────
-    this.customEventFields = config.customEventFields || "";
-    this.eventTypeSelect   = config.eventTypeSelect || "i=2041";
-    this.eventTypeIds      = config.eventTypeIds || "";
+    this.customEventFields = config.customEventFields || '';
+    this.eventTypeSelect = config.eventTypeSelect || 'i=2041';
+    this.eventTypeIds = config.eventTypeIds || '';
 
     // ── Browse ──────────────────────────────────────────────────────────
-    this.collect  = config.collect === true;
+    this.collect = config.collect === true;
     this.maxDepth = Number(config.maxDepth) || 1;
 
     // ── History ─────────────────────────────────────────────────────────
-    this.aggregate          = config.aggregate || "raw";
-    this.numValuesPerNode   = Number(config.numValuesPerNode) || 1000;
+    this.aggregate = config.aggregate || 'raw';
+    this.numValuesPerNode = Number(config.numValuesPerNode) || 1000;
     this.processingInterval = Number(config.processingInterval) || 3600000;
-    this.returnBounds       = config.returnBounds === true;
+    this.returnBounds = config.returnBounds === true;
 
     // ── History time range ─────────────────────────────────────────────
-    this.historyRange     = Number(config.historyRange) || 1;
-    this.historyRangeUnit = config.historyRangeUnit || "h";
+    this.historyRange = Number(config.historyRange) || 1;
+    this.historyRangeUnit = config.historyRangeUnit || 'h';
 
     // ── Acknowledge ─────────────────────────────────────────────────────
-    this.comment = config.comment || "Acknowledged from Node-RED";
+    this.comment = config.comment || 'Acknowledged from Node-RED';
 
     // ── Method ──────────────────────────────────────────────────────────
     // objectId, methodId, and inputArguments are configured on the Smart Item node.
     // The action node preserves any on-msg overrides for backward compatibility.
-    this.objectId = config.objectId || "";
-    this.methodId = config.methodId || "";
+    this.objectId = config.objectId || '';
+    this.methodId = config.methodId || '';
 
     // ── Connect / Reconnect ─────────────────────────────────────────────
-    this.endpointUrl = config.endpointUrl || "";
+    this.endpointUrl = config.endpointUrl || '';
 
     // ── Subscription config node reference ──────────────────────────────
     this.subscriptionNode = RED.nodes.getNode(config.subscription);
@@ -71,66 +70,66 @@ module.exports = function (RED) {
     const node = this;
 
     // ── Input handler ────────────────────────────────────────────────────
-    node.on("input", (msg, send, done) => {
+    node.on('input', (msg, send, done) => {
       msg.action = node.action;
 
       switch (node.action) {
-        case "subscribe":
+        case 'subscribe':
           if (node.subscriptionNode) {
             msg.subscriptionId = msg.subscriptionId || node.subscriptionNode.id;
           }
           break;
 
-        case "events":
+        case 'events':
           if (node.subscriptionNode) {
             msg.subscriptionId = msg.subscriptionId || node.subscriptionNode.id;
           }
           break;
 
-        case "monitor":
-          msg.deadbandType  = msg.deadbandType  || node.deadbandType;
+        case 'monitor':
+          msg.deadbandType = msg.deadbandType || node.deadbandType;
           msg.deadbandValue = msg.deadbandValue ?? node.deadbandValue;
           if (node.subscriptionNode) {
             msg.subscriptionId = msg.subscriptionId || node.subscriptionNode.id;
           }
           break;
 
-        case "browse":
-          msg.collect  = node.collect;
+        case 'browse':
+          msg.collect = node.collect;
           msg.maxDepth = msg.maxDepth || node.maxDepth;
           break;
 
-        case "history": {
-          msg.aggregate          = msg.aggregate          || node.aggregate;
-          msg.numValuesPerNode   = msg.numValuesPerNode   || node.numValuesPerNode;
+        case 'history': {
+          msg.aggregate = msg.aggregate || node.aggregate;
+          msg.numValuesPerNode = msg.numValuesPerNode || node.numValuesPerNode;
           msg.processingInterval = msg.processingInterval || node.processingInterval;
-          msg.returnBounds       = msg.returnBounds       ?? node.returnBounds;
+          msg.returnBounds = msg.returnBounds ?? node.returnBounds;
           // Compute start/end from relative range if not already set
           const rangeMs = toMilliseconds(node.historyRange, node.historyRangeUnit);
-          const now     = new Date();
-          msg.end   = msg.end   || now;
+          const now = new Date();
+          msg.end = msg.end || now;
           msg.start = msg.start || new Date(now.getTime() - rangeMs);
           break;
         }
 
-        case "acknowledge":
+        case 'acknowledge':
           msg.comment = msg.comment || node.comment;
           break;
 
-        case "method":
+        case 'method':
           msg.objectId = msg.objectId || node.objectId;
           msg.methodId = msg.methodId || node.methodId;
           break;
 
-        case "unsubscribe":
-        case "deletesubscription":
+        case 'unsubscribe':
+        case 'deletesubscription':
           if (node.subscriptionNode) {
             msg.subscriptionId = msg.subscriptionId || node.subscriptionNode.id;
           }
           break;
 
-        case "connect":
-        case "reconnect":
+        case 'connect':
+        case 'reconnect':
           if (node.endpointUrl) {
             msg.OpcUaEndpoint = msg.OpcUaEndpoint || {};
             msg.OpcUaEndpoint.endpoint = msg.OpcUaEndpoint.endpoint || node.endpointUrl;
@@ -139,9 +138,9 @@ module.exports = function (RED) {
       }
 
       // Events: parse custom fields from comma-separated string
-      if (node.action === "events" && node.customEventFields) {
+      if (node.action === 'events' && node.customEventFields) {
         const fields = node.customEventFields
-          .split(",")
+          .split(',')
           .map((f) => f.trim())
           .filter(Boolean);
         if (fields.length > 0) {
@@ -150,18 +149,18 @@ module.exports = function (RED) {
       }
 
       // Events: resolve event type IDs from dropdown or custom field
-      if (node.action === "events") {
+      if (node.action === 'events') {
         if (!msg.eventTypeIds) {
-          if (node.eventTypeSelect === "custom" && node.eventTypeIds) {
+          if (node.eventTypeSelect === 'custom' && node.eventTypeIds) {
             // Custom: parse comma-separated NodeIds
             const ids = node.eventTypeIds
-              .split(",")
+              .split(',')
               .map((id) => id.trim())
               .filter(Boolean);
             if (ids.length > 0) {
               msg.eventTypeIds = ids;
             }
-          } else if (node.eventTypeSelect && node.eventTypeSelect !== "custom") {
+          } else if (node.eventTypeSelect && node.eventTypeSelect !== 'custom') {
             // Standard dropdown selection — single NodeId
             msg.eventTypeIds = node.eventTypeSelect;
           }
@@ -173,7 +172,7 @@ module.exports = function (RED) {
     });
   }
 
-  RED.nodes.registerType("opcua-action", OpcUaActionNode);
+  RED.nodes.registerType('opcua-action', OpcUaActionNode);
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────

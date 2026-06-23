@@ -9,12 +9,12 @@
  * Each manager is created once and reused across all nodes in the runtime.
  */
 
-"use strict";
+'use strict';
 
-const { OPCUACertificateManager } = require("node-opcua");
-const envPaths = require("env-paths");
+const { OPCUACertificateManager } = require('node-opcua');
+const envPaths = require('env-paths');
 
-const paths = envPaths("brdk-node-red-opcua");
+const paths = envPaths('brdk-node-red-opcua');
 
 // ── Singleton instances ────────────────────────────────────────────────────────
 

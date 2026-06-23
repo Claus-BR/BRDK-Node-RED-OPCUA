@@ -13,7 +13,7 @@
  *   - Credential storage (username, password — encrypted by Node-RED)
  */
 
-"use strict";
+'use strict';
 
 module.exports = function (RED) {
   /**
@@ -25,27 +25,27 @@ module.exports = function (RED) {
     RED.nodes.createNode(this, config);
 
     // ── Connection settings ──────────────────────────────────────────────
-    this.endpoint       = config.endpoint;
-    this.securityPolicy = config.securityPolicy || "None";
-    this.securityMode   = normalizeSecurityMode(config.securityMode);
+    this.endpoint = config.endpoint;
+    this.securityPolicy = config.securityPolicy || 'None';
+    this.securityMode = normalizeSecurityMode(config.securityMode);
 
     // ── Authentication method flags ──────────────────────────────────────
-    this.none     = config.none !== false;   // Anonymous (default true)
-    this.login    = config.login === true;   // Username / password
+    this.none = config.none !== false; // Anonymous (default true)
+    this.login = config.login === true; // Username / password
     this.usercert = config.usercert === true; // X.509 user certificate
 
     // ── Certificate file paths (only when usercert is true) ──────────────
-    this.userCertificate = config.userCertificate || "";
-    this.userPrivatekey  = config.userPrivatekey || "";
+    this.userCertificate = config.userCertificate || '';
+    this.userPrivatekey = config.userPrivatekey || '';
 
     // ── Display name ─────────────────────────────────────────────────────
-    this.name = config.name || "";
+    this.name = config.name || '';
   }
 
-  RED.nodes.registerType("opcua-endpoint", OpcUaEndpointNode, {
+  RED.nodes.registerType('opcua-endpoint', OpcUaEndpointNode, {
     credentials: {
-      user:     { type: "text" },
-      password: { type: "password" },
+      user: { type: 'text' },
+      password: { type: 'password' },
     },
   });
 };
@@ -63,9 +63,9 @@ module.exports = function (RED) {
  */
 function normalizeSecurityMode(mode) {
   const map = {
-    NONE:           "None",
-    SIGN:           "Sign",
-    SIGNANDENCRYPT: "SignAndEncrypt",
+    NONE: 'None',
+    SIGN: 'Sign',
+    SIGNANDENCRYPT: 'SignAndEncrypt',
   };
-  return map[String(mode).toUpperCase()] || mode || "None";
+  return map[String(mode).toUpperCase()] || mode || 'None';
 }

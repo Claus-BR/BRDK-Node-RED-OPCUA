@@ -13,24 +13,22 @@
  *   Output 1 — Enriched message ready for the OPC UA Client node
  */
 
-"use strict";
+'use strict';
 
-const opcua = require("node-opcua");
-const { getClientCertificateManager } = require("../lib/opcua-certificate-manager");
+const opcua = require('node-opcua');
+const { getClientCertificateManager } = require('../lib/opcua-certificate-manager');
 const {
   resolveUserIdentity,
   resolveSecurityMode,
   resolveSecurityPolicy,
-} = require("../lib/opcua-connection");
+} = require('../lib/opcua-connection');
+const { coerceScalarValue, isArrayType, coerceArrayValue } = require('../lib/opcua-data-converter');
 const {
-  coerceScalarValue,
-  isArrayType,
-  coerceArrayValue,
-} = require("../lib/opcua-data-converter");
-const { getExtraDataTypeManager, DataTypeExtractStrategy } = require("node-opcua-client-dynamic-extension-object");
+  getExtraDataTypeManager,
+  DataTypeExtractStrategy,
+} = require('node-opcua-client-dynamic-extension-object');
 
 module.exports = function (RED) {
-
   // ═══════════════════════════════════════════════════════════════════════
   //  NODE CONSTRUCTOR
   // ═══════════════════════════════════════════════════════════════════════
@@ -42,12 +40,12 @@ module.exports = function (RED) {
 
     // ── Configuration ──────────────────────────────────────────────────
     this.endpointNode = RED.nodes.getNode(config.endpoint);
-    this.name         = config.name || "";
+    this.name = config.name || '';
 
     // Items array: [{ nodeId, datatype, browseName }]
     this.items = [];
     try {
-      this.items = JSON.parse(config.items || "[]");
+      this.items = JSON.parse(config.items || '[]');
     } catch {
       this.items = [];
     }
@@ -55,15 +53,15 @@ module.exports = function (RED) {
     // Method configuration: { objectId, methodId, browseName, inputArguments }
     this.method = null;
     try {
-      this.method = JSON.parse(config.method || "null");
+      this.method = JSON.parse(config.method || 'null');
     } catch {
       this.method = null;
     }
 
     // ── Input handler ──────────────────────────────────────────────────
-    node.on("input", (msg, send, done) => {
+    node.on('input', (msg, send, done) => {
       if (node.items.length === 0 && !node.method) {
-        node.warn("No items or method configured");
+        node.warn('No items or method configured');
         done();
         return;
       }
@@ -72,14 +70,14 @@ module.exports = function (RED) {
       if (node.items.length > 0) {
         msg.items = node.items.map((item) => {
           const itemObj = {
-            nodeId:     item.nodeId,
-            datatype:   item.datatype || "",
-            browseName: item.browseName || "",
+            nodeId: item.nodeId,
+            datatype: item.datatype || '',
+            browseName: item.browseName || '',
           };
 
           // Include per-item static value if configured (for write operations)
-          if (item.value !== undefined && item.value !== null && item.value !== "") {
-            itemObj.value = coerceValue(item.datatype || "", item.value);
+          if (item.value !== undefined && item.value !== null && item.value !== '') {
+            itemObj.value = coerceValue(item.datatype || '', item.value);
           }
 
           return itemObj;
@@ -99,8 +97,8 @@ module.exports = function (RED) {
             .filter((a) => a.dataType)
             .map((a) => {
               const entry = {
-                dataType: a.isExtensionObject ? "ExtensionObject" : a.dataType,
-                value:    a.value ?? "",
+                dataType: a.isExtensionObject ? 'ExtensionObject' : a.dataType,
+                value: a.value ?? '',
               };
               // For ExtensionObjects, pass the type NodeId so the client
               // can call session.constructExtensionObject()
@@ -120,7 +118,7 @@ module.exports = function (RED) {
     });
   }
 
-  RED.nodes.registerType("opcua-smart-item", OpcUaSmartItemNode);
+  RED.nodes.registerType('opcua-smart-item', OpcUaSmartItemNode);
 
   // ═══════════════════════════════════════════════════════════════════════
   //  HTTP ADMIN ENDPOINTS — Editor address space browsing
@@ -135,20 +133,20 @@ module.exports = function (RED) {
    *
    * Returns JSON object with `children` array (browseName, nodeId, displayName,
    * nodeClass, dataType, hasChildren) and `serverName` from the OPC UA server.
-   * 
+   *
    * Sorts folders first, then alphabetically — similar to UaExpert.
    */
-  RED.httpAdmin.get("/opcua-smart-item/browse", async (req, res) => {
+  RED.httpAdmin.get('/opcua-smart-item/browse', async (req, res) => {
     const endpointId = req.query.endpointId;
-    const nodeId     = req.query.nodeId || "ns=0;i=84";
+    const nodeId = req.query.nodeId || 'ns=0;i=84';
 
     if (!endpointId) {
-      return res.status(400).json({ error: "endpointId is required" });
+      return res.status(400).json({ error: 'endpointId is required' });
     }
 
     const endpointNode = RED.nodes.getNode(endpointId);
     if (!endpointNode) {
-      return res.status(404).json({ error: "Endpoint node not found. Deploy first." });
+      return res.status(404).json({ error: 'Endpoint node not found. Deploy first.' });
     }
 
     let client = null;
@@ -161,7 +159,7 @@ module.exports = function (RED) {
 
       // Create ephemeral client
       client = opcua.OPCUAClient.create({
-        applicationName: "BRDK-NodeRED-SmartItem-Browser",
+        applicationName: 'BRDK-NodeRED-SmartItem-Browser',
         clientCertificateManager: certManager,
         securityMode: resolveSecurityMode(endpointNode.securityMode),
         securityPolicy: resolveSecurityPolicy(endpointNode.securityPolicy),
@@ -175,12 +173,12 @@ module.exports = function (RED) {
       session = await client.createSession(userIdentity);
 
       // Read the server's ApplicationName from its endpoints
-      let serverName = "";
+      let serverName = '';
       try {
         const endpoints = await client.getEndpoints();
         if (endpoints && endpoints.length > 0) {
           const appName = endpoints[0].server?.applicationName;
-          serverName = (appName && appName.text) ? appName.text : "";
+          serverName = appName && appName.text ? appName.text : '';
         }
       } catch {
         // Fall back to empty — not critical
@@ -191,17 +189,20 @@ module.exports = function (RED) {
       const browseResult = await session.browse({
         nodeId,
         browseDirection: opcua.BrowseDirection.Forward,
-        referenceTypeId: "HierarchicalReferences",
+        referenceTypeId: 'HierarchicalReferences',
         includeSubtypes: true,
-        resultMask: 0x3F, // All fields
+        resultMask: 0x3f, // All fields
       });
-
 
       // BrowseNames to filter out (irrelevant meta/type-definition nodes)
       const FILTERED_BROWSE_NAMES = new Set([
-        "FolderType", "BaseObjectType", "BaseVariableType",
-        "BaseDataVariableType", "PropertyType", "ModellingRules",
-        "AggregateFunctions",
+        'FolderType',
+        'BaseObjectType',
+        'BaseVariableType',
+        'BaseDataVariableType',
+        'PropertyType',
+        'ModellingRules',
+        'AggregateFunctions',
       ]);
 
       const children = [];
@@ -209,12 +210,12 @@ module.exports = function (RED) {
       if (browseResult.references) {
         for (const ref of browseResult.references) {
           const refNodeId = ref.nodeId.toString();
-          const browseName = ref.browseName?.name || ref.browseName?.toString() || "";
+          const browseName = ref.browseName?.name || ref.browseName?.toString() || '';
 
           // Skip irrelevant meta nodes
           if (FILTERED_BROWSE_NAMES.has(browseName)) continue;
 
-          let dataType = "";
+          let dataType = '';
           let isArray = false;
 
           // Read DataType and ValueRank for Variable nodes
@@ -230,7 +231,10 @@ module.exports = function (RED) {
                   nodeId: dtNodeId,
                   attributeId: opcua.AttributeIds.BrowseName,
                 });
-                dataType = dtNode.value?.value?.name || opcua.DataType[dtNodeId.value] || dtNodeId.toString();
+                dataType =
+                  dtNode.value?.value?.name ||
+                  opcua.DataType[dtNodeId.value] ||
+                  dtNodeId.toString();
               }
             } catch {
               // Ignore read errors
@@ -251,8 +255,8 @@ module.exports = function (RED) {
           }
 
           // Check if node has children (for tree expansion)
-          let hasChildren = ref.nodeClass === opcua.NodeClass.Object
-            || ref.nodeClass === opcua.NodeClass.View;
+          let hasChildren =
+            ref.nodeClass === opcua.NodeClass.Object || ref.nodeClass === opcua.NodeClass.View;
 
           if (!hasChildren) {
             try {
@@ -269,13 +273,13 @@ module.exports = function (RED) {
 
           children.push({
             browseName,
-            nodeId:      refNodeId,
-            displayName: ref.displayName?.text || "",
-            nodeClass:   opcua.NodeClass[ref.nodeClass] || String(ref.nodeClass),
+            nodeId: refNodeId,
+            displayName: ref.displayName?.text || '',
+            nodeClass: opcua.NodeClass[ref.nodeClass] || String(ref.nodeClass),
             dataType,
             hasChildren,
-            isVariable:  ref.nodeClass === opcua.NodeClass.Variable,
-            isMethod:    ref.nodeClass === opcua.NodeClass.Method,
+            isVariable: ref.nodeClass === opcua.NodeClass.Variable,
+            isMethod: ref.nodeClass === opcua.NodeClass.Method,
             isArray,
           });
         }
@@ -284,7 +288,7 @@ module.exports = function (RED) {
       // Sort: Folders/Objects first, then Methods, then Variables, alphabetically within each group
       children.sort((a, b) => {
         // Assign sort priority: Objects/Folders=0, Methods=1, Variables=2
-        const priority = (c) => c.isVariable ? 2 : c.isMethod ? 1 : 0;
+        const priority = (c) => (c.isVariable ? 2 : c.isMethod ? 1 : 0);
         const pa = priority(a);
         const pb = priority(b);
         if (pa !== pb) return pa - pb;
@@ -294,7 +298,11 @@ module.exports = function (RED) {
         return nameA.localeCompare(nameB);
       });
 
-      res.json({ children, serverName, _debug: { refCount: browseResult.references?.length || 0, childCount: children.length } });
+      res.json({
+        children,
+        serverName,
+        _debug: { refCount: browseResult.references?.length || 0, childCount: children.length },
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     } finally {
@@ -320,17 +328,17 @@ module.exports = function (RED) {
    *
    * Returns JSON with `inputArguments` array of { name, dataType, description, valueRank }.
    */
-  RED.httpAdmin.get("/opcua-smart-item/method-args", async (req, res) => {
+  RED.httpAdmin.get('/opcua-smart-item/method-args', async (req, res) => {
     const endpointId = req.query.endpointId;
-    const methodId   = req.query.methodId;
+    const methodId = req.query.methodId;
 
     if (!endpointId || !methodId) {
-      return res.status(400).json({ error: "endpointId and methodId are required" });
+      return res.status(400).json({ error: 'endpointId and methodId are required' });
     }
 
     const endpointNode = RED.nodes.getNode(endpointId);
     if (!endpointNode) {
-      return res.status(404).json({ error: "Endpoint node not found. Deploy first." });
+      return res.status(404).json({ error: 'Endpoint node not found. Deploy first.' });
     }
 
     let client = null;
@@ -341,7 +349,7 @@ module.exports = function (RED) {
       await certManager.initialize();
 
       client = opcua.OPCUAClient.create({
-        applicationName: "BRDK-NodeRED-SmartItem-MethodArgs",
+        applicationName: 'BRDK-NodeRED-SmartItem-MethodArgs',
         clientCertificateManager: certManager,
         securityMode: resolveSecurityMode(endpointNode.securityMode),
         securityPolicy: resolveSecurityPolicy(endpointNode.securityPolicy),
@@ -358,17 +366,17 @@ module.exports = function (RED) {
       const browseResult = await session.browse({
         nodeId: methodId,
         browseDirection: opcua.BrowseDirection.Forward,
-        referenceTypeId: "HasProperty",
+        referenceTypeId: 'HasProperty',
         includeSubtypes: true,
-        resultMask: 0x3F,
+        resultMask: 0x3f,
       });
 
       const inputArguments = [];
 
       if (browseResult.references) {
         for (const ref of browseResult.references) {
-          const name = ref.browseName?.name || "";
-          if (name === "InputArguments") {
+          const name = ref.browseName?.name || '';
+          if (name === 'InputArguments') {
             // Read the InputArguments value
             const readResult = await session.read({
               nodeId: ref.nodeId,
@@ -379,25 +387,28 @@ module.exports = function (RED) {
             if (Array.isArray(args)) {
               for (const arg of args) {
                 // Resolve DataType NodeId to human-readable name
-                let dtName = "";
+                let dtName = '';
                 if (arg.dataType) {
                   try {
                     const dtBrowse = await session.read({
                       nodeId: arg.dataType,
                       attributeId: opcua.AttributeIds.BrowseName,
                     });
-                    dtName = dtBrowse.value?.value?.name || opcua.DataType[arg.dataType.value] || arg.dataType.toString();
+                    dtName =
+                      dtBrowse.value?.value?.name ||
+                      opcua.DataType[arg.dataType.value] ||
+                      arg.dataType.toString();
                   } catch {
                     dtName = arg.dataType.toString();
                   }
                 }
 
                 inputArguments.push({
-                  name:           arg.name || "",
-                  dataType:       dtName,
-                  dataTypeNodeId: arg.dataType ? arg.dataType.toString() : "",
-                  description:    arg.description?.text || "",
-                  valueRank:      arg.valueRank ?? -1,
+                  name: arg.name || '',
+                  dataType: dtName,
+                  dataTypeNodeId: arg.dataType ? arg.dataType.toString() : '',
+                  description: arg.description?.text || '',
+                  valueRank: arg.valueRank ?? -1,
                 });
               }
             }
@@ -432,17 +443,17 @@ module.exports = function (RED) {
    *
    * Constructs an empty ExtensionObject and returns its fields.
    */
-  RED.httpAdmin.get("/opcua-smart-item/type-fields", async (req, res) => {
-    const endpointId     = req.query.endpointId;
+  RED.httpAdmin.get('/opcua-smart-item/type-fields', async (req, res) => {
+    const endpointId = req.query.endpointId;
     const dataTypeNodeId = req.query.dataTypeNodeId;
 
     if (!endpointId || !dataTypeNodeId) {
-      return res.status(400).json({ error: "endpointId and dataTypeNodeId are required" });
+      return res.status(400).json({ error: 'endpointId and dataTypeNodeId are required' });
     }
 
     const endpointNode = RED.nodes.getNode(endpointId);
     if (!endpointNode) {
-      return res.status(404).json({ error: "Endpoint node not found. Deploy first." });
+      return res.status(404).json({ error: 'Endpoint node not found. Deploy first.' });
     }
 
     let client = null;
@@ -453,7 +464,7 @@ module.exports = function (RED) {
       await certManager.initialize();
 
       client = opcua.OPCUAClient.create({
-        applicationName: "BRDK-NodeRED-SmartItem-TypeFields",
+        applicationName: 'BRDK-NodeRED-SmartItem-TypeFields',
         clientCertificateManager: certManager,
         securityMode: resolveSecurityMode(endpointNode.securityMode),
         securityPolicy: resolveSecurityPolicy(endpointNode.securityPolicy),
@@ -470,42 +481,45 @@ module.exports = function (RED) {
       await getExtraDataTypeManager(session, DataTypeExtractStrategy.Both);
 
       // Construct an empty ExtensionObject to discover its fields
-      const extObj = await session.constructExtensionObject(
-        opcua.coerceNodeId(dataTypeNodeId),
-        {},
-      );
+      const extObj = await session.constructExtensionObject(opcua.coerceNodeId(dataTypeNodeId), {});
 
       // Extract fields from the constructed object
       const fields = [];
-      if (extObj && typeof extObj === "object") {
+      if (extObj && typeof extObj === 'object') {
         for (const [key, val] of Object.entries(extObj)) {
           // Skip internal/schema properties
-          if (key.startsWith("_") || key === "schema" || key === "encodingDefaultBinary" || key === "encodingDefaultXml") continue;
+          if (
+            key.startsWith('_') ||
+            key === 'schema' ||
+            key === 'encodingDefaultBinary' ||
+            key === 'encodingDefaultXml'
+          )
+            continue;
 
-          let fieldType = "String";
-          let defaultVal = "";
-          if (typeof val === "number") {
-            fieldType = "Double";
+          let fieldType = 'String';
+          let defaultVal = '';
+          if (typeof val === 'number') {
+            fieldType = 'Double';
             defaultVal = String(val);
-          } else if (typeof val === "boolean") {
-            fieldType = "Boolean";
+          } else if (typeof val === 'boolean') {
+            fieldType = 'Boolean';
             defaultVal = String(val);
           } else if (val instanceof Date) {
-            fieldType = "DateTime";
+            fieldType = 'DateTime';
             defaultVal = val.toISOString();
-          } else if (val && val.constructor?.name === "NodeId") {
-            fieldType = "NodeId";
+          } else if (val && val.constructor?.name === 'NodeId') {
+            fieldType = 'NodeId';
             defaultVal = val.toString();
-          } else if (typeof val === "string") {
-            fieldType = "String";
+          } else if (typeof val === 'string') {
+            fieldType = 'String';
             defaultVal = val;
-          } else if (val && typeof val === "object" && typeof val.value === "number") {
+          } else if (val && typeof val === 'object' && typeof val.value === 'number') {
             // Enum types (e.g. ServerState) have a numeric .value
-            fieldType = val.constructor?.name || "Enum";
+            fieldType = val.constructor?.name || 'Enum';
             defaultVal = String(val.value);
-          } else if (val && typeof val === "object") {
-            fieldType = val.constructor?.name || "Object";
-            defaultVal = "";
+          } else if (val && typeof val === 'object') {
+            fieldType = val.constructor?.name || 'Object';
+            defaultVal = '';
           }
 
           fields.push({
