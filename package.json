@@ -1,12 +1,12 @@
 {
   "name": "@brdk/node-red-opcua",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A modern, clean Node-RED OPC UA client library for interacting with OPC UA servers",
   "license": "Apache-2.0",
   "author": "Clausbr",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Claus-BR/BRDK-Node-RED-OPCUA.git"
+    "url": "git+https://github.com/BRDK-Public/brdk-node-red-opcua.git"
   },
   "keywords": [
     "node-red",
