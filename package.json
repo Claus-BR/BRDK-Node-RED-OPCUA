@@ -40,9 +40,21 @@
     "node-opcua-client-crawler": "^2.127.1",
     "node-opcua-file-transfer": "^2.160.0"
   },
+  "scripts": {
+    "prepare": "lefthook install",
+    "format": "prettier --write \"src/**/*.{js,html}\"",
+    "format:check": "prettier --check \"src/**/*.{js,html}\"",
+    "lint": "eslint src/**/*.js",
+    "lint:fix": "eslint src/**/*.js --fix"
+  },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.5.0",
+    "globals": "^17.7.0",
+    "lefthook": "^2.1.9",
     "mocha": "^11.7.5",
     "node-red-node-test-helper": "^0.3.6",
+    "prettier": "^3.8.4",
     "should": "^13.2.3"
   }
 }
